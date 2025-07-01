@@ -21,12 +21,36 @@ class Clients extends Table {
 // Template table definition
 class Templates extends Table {
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get name => text().withLength(min: 1, max: 200)();
-  TextColumn get type => text().withLength(min: 1, max: 20)(); // 'email' or 'whatsapp'
-  TextColumn get subject => text().nullable()(); // For email templates
-  TextColumn get body => text()();
+  TextColumn get name => text().withLength(min: 1, max: 255)();
+  TextColumn get subject => text().nullable()();
+  TextColumn get body => text()(); // Keep for backward compatibility
+  TextColumn get templateType => text().withDefault(const Constant('email'))(); // 'email' or 'whatsapp'
+  TextColumn get blocksJson => text().nullable()(); // JSON representation of blocks
+  BoolColumn get isEmail => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class TemplateBlocks extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get templateId => integer().references(Templates, #id, onDelete: KeyAction.cascade)();
+  TextColumn get blockId => text()(); // UUID for the block
+  TextColumn get blockType => text()();
+  IntColumn get sortOrder => integer()();
+  TextColumn get propertiesJson => text()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class ContentPlaceholders extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get key => text().unique()();
+  TextColumn get label => text()();
+  TextColumn get description => text().nullable()();
+  TextColumn get defaultValue => text().nullable()();
+  TextColumn get dataType => text().withDefault(const Constant('text'))(); // 'text', 'number', 'date', 'boolean'
+  BoolColumn get isRequired => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
 // Tags table for client categorization
@@ -74,7 +98,9 @@ class MessageLogs extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
-@DriftDatabase(tables: [Clients, Templates, Tags, ClientTags, Campaigns, MessageLogs])
+@DriftDatabase(tables: [Clients, Templates, Tags, ClientTags, Campaigns, MessageLogs,
+  TemplateBlocks,
+  ContentPlaceholders,])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 

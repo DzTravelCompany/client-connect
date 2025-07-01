@@ -3,9 +3,9 @@ import 'package:client_connect/src/features/campaigns/presentation/campaign_crea
 import 'package:client_connect/src/features/campaigns/presentation/campaign_dashboard_screen.dart';
 import 'package:client_connect/src/features/campaigns/presentation/campaign_details_screen.dart';
 import 'package:client_connect/src/features/import_export/presentation/import_export_screen.dart';
-import 'package:client_connect/src/features/logs/presentation/tag_management_screen.dart';
+import 'package:client_connect/src/features/tags/presentation/tag_management_screen.dart';
 import 'package:client_connect/src/features/settings/presentation/settings_screen.dart';
-import 'package:client_connect/src/features/templates/presentation/template_from_screen.dart';
+import 'package:client_connect/src/features/templates/presentation/template_editor_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/clients/presentation/client_list_screen.dart';
@@ -40,15 +40,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/templates',
             builder: (context, state) => const TemplateListScreen(),
           ),
+          // GoRoute(
+          //   path: '/templates/new',
+          //   builder: (context, state) => const TemplateFormScreen(),
+          // ),
+          // GoRoute(
+          //   path: '/templates/edit/:id',
+          //   builder: (context, state) {
+          //     final id = int.parse(state.pathParameters['id']!);
+          //     return TemplateFormScreen(templateId: id);
+          //   },
+          // ),
           GoRoute(
-            path: '/templates/add',
-            builder: (context, state) => const TemplateFormScreen(),
+            path: '/templates/editor',
+            builder: (context, state) => const TemplateEditorScreen(),
           ),
           GoRoute(
-            path: '/templates/edit/:id',
+            path: '/templates/editor/:id',
             builder: (context, state) {
               final id = int.parse(state.pathParameters['id']!);
-              return TemplateFormScreen(templateId: id);
+              return TemplateEditorScreen(templateId: id);
             },
           ),
           GoRoute(

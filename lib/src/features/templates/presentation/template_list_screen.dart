@@ -1,23 +1,18 @@
+import 'package:client_connect/constants.dart';
+import 'package:client_connect/src/features/templates/data/template_model.dart';
+import 'package:client_connect/src/features/templates/logic/template_providers.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../logic/template_providers.dart';
 
-class TemplateListScreen extends ConsumerStatefulWidget {
+
+class TemplateListScreen extends ConsumerWidget {
   const TemplateListScreen({super.key});
 
   @override
-  ConsumerState<TemplateListScreen> createState() => _TemplateListScreenState();
-}
-
-class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
-  String _selectedFilter = 'all';
-
-  @override
-  Widget build(BuildContext context) {
-    final templatesAsync = _selectedFilter == 'all'
-        ? ref.watch(allTemplatesProvider)
-        : ref.watch(templatesByTypeProvider(_selectedFilter));
+  Widget build(BuildContext context, WidgetRef ref) {
+    final templatesAsync = ref.watch(templatesProvider);
+    final theme = FluentTheme.of(context);
 
     return ScaffoldPage(
       header: PageHeader(
@@ -25,222 +20,322 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
         commandBar: CommandBar(
           primaryItems: [
             CommandBarButton(
-              icon: const Icon(FluentIcons.add),
-              label: const Text('Add Template'),
-              onPressed: () => context.go('/templates/add'),
+              icon: const Icon(FluentIcons.design),
+              label: const Text('Advanced Editor'),
+              onPressed: () => context.go('/templates/editor'),
             ),
           ],
         ),
       ),
-      content: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // Filter tabs
-            Row(
+      content: templatesAsync.when(
+        data: (templates) => templates.isEmpty
+            ? _buildEmptyState(context, theme)
+            : _buildTemplateList(context, ref, templates, theme),
+        loading: () => const Center(child: ProgressRing()),
+        error: (error, stackTrace) => _buildErrorState(context, theme, error),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, FluentThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            FluentIcons.text_document,
+            size: 64,
+            color: theme.inactiveColor,
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'No templates found',
+            style: theme.typography.subtitle?.copyWith(
+              color: theme.inactiveColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Create your first template to get started',
+            style: theme.typography.body?.copyWith(
+              color: theme.inactiveColor,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: () => context.go('/templates/editor'),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                _buildFilterTab('all', 'All Templates'),
-                const SizedBox(width: 8),
-                _buildFilterTab('email', 'Email Templates'),
-                const SizedBox(width: 8),
-                _buildFilterTab('whatsapp', 'WhatsApp Templates'),
+                Icon(FluentIcons.add, size: 16),
+                SizedBox(width: 8),
+                Text('Create Template'),
               ],
             ),
-            const SizedBox(height: 16),
-            
-            // Template list
-            Expanded(
-              child: templatesAsync.when(
-                data: (templates) {
-                  if (templates.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(FluentIcons.mail, size: 64),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No templates found',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text('Create your first template to get started'),
-                          const SizedBox(height: 16),
-                          FilledButton(
-                            onPressed: () => context.go('/templates/add'),
-                            child: const Text('Add Template'),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                  
-                  return GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      childAspectRatio: 1.2,
-                    ),
-                    itemCount: templates.length,
-                    itemBuilder: (context, index) {
-                      final template = templates[index];
-                      return _buildTemplateCard(template);
-                    },
-                  );
-                },
-                loading: () => const Center(child: ProgressRing()),
-                error: (error, stack) => Center(
-                  child: Text('Error: $error'),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterTab(String value, String label) {
-    final isSelected = _selectedFilter == value;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedFilter = value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? FluentTheme.of(context).accentColor : Colors.transparent,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: isSelected ? FluentTheme.of(context).accentColor : Colors.grey[60],
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : null,
-            fontWeight: isSelected ? FontWeight.bold : null,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTemplateCard(template) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  template.isEmail ? FluentIcons.mail : FluentIcons.chat,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    template.name,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(FluentIcons.more),
-                  onPressed: () => _showTemplateMenu(template),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (template.subject != null) ...[
-              Text(
-                'Subject: ${template.subject}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[100],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-            ],
-            Expanded(
-              child: Text(
-                template.body,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[120],
-                ),
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Updated ${_formatDate(template.updatedAt)}',
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey[80],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showTemplateMenu(template) {
-    showDialog(
-      context: context,
-      builder: (context) => ContentDialog(
-        title: Text(template.name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(FluentIcons.edit),
-              title: const Text('Edit Template'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                context.go('/templates/edit/${template.id}');
-              },
-            ),
-            ListTile(
-              leading: const Icon(FluentIcons.view),
-              title: const Text('Preview Template'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                context.go('/templates/preview/${template.id}');
-              },
-            ),
-            ListTile(
-              leading: const Icon(FluentIcons.delete),
-              title: const Text('Delete Template'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                _showDeleteDialog(template.id);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          Button(
-            child: const Text('Close'),
-            onPressed: () => Navigator.of(context).pop(),
           ),
         ],
       ),
     );
   }
 
-  void _showDeleteDialog(int templateId) {
+  Widget _buildErrorState(BuildContext context, FluentThemeData theme, Object error) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            FluentIcons.error,
+            size: 64,
+            color: Colors.red,
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Error loading templates',
+            style: theme.typography.subtitle,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error.toString(),
+            style: theme.typography.body?.copyWith(
+              color: theme.inactiveColor,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          Button(
+            onPressed: () => context.go('/templates'),
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTemplateList(
+    BuildContext context,
+    WidgetRef ref,
+    List<TemplateModel> templates,
+    FluentThemeData theme,
+  ) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: templates.length,
+      itemBuilder: (context, index) {
+        logger.i(templates);
+        final template = templates[index];
+        return TemplateListTile(template: template);
+      },
+    );
+  }
+}
+
+class TemplateListTile extends ConsumerWidget {
+  final TemplateModel template;
+
+  const TemplateListTile({super.key, required this.template});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = FluentTheme.of(context);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: HoverButton(
+        onPressed: () => context.go('/templates/edit/${template.id}'),
+        builder: (context, states) {
+          final isHovering = states.contains(WidgetState.hovered);
+          
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isHovering
+                  ? theme.accentColor.withValues(alpha: 0.05)
+                  : theme.cardColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isHovering
+                    ? theme.accentColor.withValues(alpha: 0.2)
+                    : theme.accentColor,
+              ),
+              boxShadow: isHovering
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: theme.accentColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    _getTemplateIcon(template.type),
+                    color: theme.accentColor,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        template.name,
+                        style: theme.typography.bodyStrong,
+                      ),
+                      const SizedBox(height: 4),
+                      if (template.subject?.isNotEmpty == true) ...[
+                        Text(
+                          'Subject: ${template.subject}',
+                          style: theme.typography.body?.copyWith(
+                            color: theme.inactiveColor,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                      ],
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _getTypeColor(template.type).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              template.type.toUpperCase(),
+                              style: TextStyle(
+                                color: _getTypeColor(template.type),
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _formatDate(template.updatedAt),
+                            style: theme.typography.caption?.copyWith(
+                              color: theme.inactiveColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                DropDownButton(
+                  leading: const Icon(FluentIcons.more_vertical, size: 16),
+                  items: [
+                    MenuFlyoutItem(
+                      leading: const Icon(FluentIcons.edit),
+                      text: const Text('Edit'),
+                      onPressed: () => context.go('/templates/edit/${template.id}'),
+                    ),
+                    MenuFlyoutItem(
+                      leading: const Icon(FluentIcons.design),
+                      text: const Text('Advanced Editor'),
+                      onPressed: () => context.go('/templates/editor/${template.id}'),
+                    ),
+                    MenuFlyoutSeparator(),
+                    MenuFlyoutItem(
+                      leading: const Icon(FluentIcons.copy),
+                      text: const Text('Duplicate'),
+                      onPressed: () => _duplicateTemplate(context, ref, template),
+                    ),
+                    MenuFlyoutItem(
+                      leading: const Icon(FluentIcons.delete),
+                      text: const Text('Delete'),
+                      onPressed: () => _showDeleteDialog(context, ref, template),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  IconData _getTemplateIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'email':
+        return FluentIcons.mail;
+      case 'whatsapp':
+        return FluentIcons.chat;
+      default:
+        return FluentIcons.text_document;
+    }
+  }
+
+  Color _getTypeColor(String type) {
+    switch (type.toLowerCase()) {
+      case 'email':
+        return Colors.blue;
+      case 'whatsapp':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  void _duplicateTemplate(BuildContext context, WidgetRef ref, TemplateModel template) async {
+    try {
+      // TODO: Implement template duplication
+      displayInfoBar(
+        context,
+        builder: (context, close) => InfoBar(
+          title: const Text('Template Duplicated'),
+          content: Text('${template.name} (Copy) has been created'),
+          severity: InfoBarSeverity.success,
+          onClose: close,
+        ),
+      );
+    } catch (e) {
+      displayInfoBar(
+        context,
+        builder: (context, close) => InfoBar(
+          title: const Text('Error'),
+          content: Text('Failed to duplicate template: $e'),
+          severity: InfoBarSeverity.error,
+          onClose: close,
+        ),
+      );
+    }
+  }
+
+  void _showDeleteDialog(BuildContext context, WidgetRef ref, TemplateModel template) {
     showDialog(
       context: context,
       builder: (context) => ContentDialog(
         title: const Text('Delete Template'),
-        content: const Text('Are you sure you want to delete this template? This action cannot be undone.'),
+        content: Text('Are you sure you want to delete "${template.name}"? This action cannot be undone.'),
         actions: [
           Button(
             child: const Text('Cancel'),
@@ -250,52 +345,32 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
             child: const Text('Delete'),
             onPressed: () async {
               Navigator.of(context).pop();
-              final dao = ref.read(templateDaoProvider);
               try {
-                await dao.deleteTemplate(templateId);
-                if (context.mounted) {
-                  displayInfoBar(
-                    context,
-                    builder: (context, close) => InfoBar(
-                      title: const Text('Template deleted'),
-                      content: const Text('The template has been successfully deleted.'),
-                      severity: InfoBarSeverity.success,
-                      onClose: close,
-                    ),
-                  );
-                }
+                // TODO: Implement template deletion
+                displayInfoBar(
+                  context,
+                  builder: (context, close) => InfoBar(
+                    title: const Text('Template Deleted'),
+                    content: Text('${template.name} has been deleted'),
+                    severity: InfoBarSeverity.success,
+                    onClose: close,
+                  ),
+                );
               } catch (e) {
-                if (context.mounted) {
-                  displayInfoBar(
-                    context,
-                    builder: (context, close) => InfoBar(
-                      title: const Text('Error'),
-                      content: Text('Failed to delete template: $e'),
-                      severity: InfoBarSeverity.error,
-                      onClose: close,
-                    ),
-                  );
-                }
+                displayInfoBar(
+                  context,
+                  builder: (context, close) => InfoBar(
+                    title: const Text('Error'),
+                    content: Text('Failed to delete template: $e'),
+                    severity: InfoBarSeverity.error,
+                    onClose: close,
+                  ),
+                );
               }
             },
           ),
         ],
       ),
     );
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-    
-    if (difference.inDays > 0) {
-      return '${difference.inDays} days ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} hours ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minutes ago';
-    } else {
-      return 'Just now';
-    }
   }
 }

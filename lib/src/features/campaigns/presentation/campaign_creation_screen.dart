@@ -120,7 +120,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.grey,
+                color: Colors.grey[10],
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -160,7 +160,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                 ? Colors.green 
                 : isActive 
                     ? FluentTheme.of(context).accentColor 
-                    : Colors.grey,
+                    : Colors.grey[60],
             shape: BoxShape.circle,
           ),
           child: Center(
@@ -363,7 +363,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   }
 
   Widget _buildTemplateSelection() {
-    final templatesAsync = ref.watch(allTemplatesProvider);
+    final templatesAsync = ref.watch(templatesProvider);
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -533,7 +533,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
               decoration: BoxDecoration(
                 color: Colors.grey,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey),
+                border: Border.all(color: Colors.grey[40]),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -566,7 +566,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                       decoration: BoxDecoration(
                         color: Colors.grey,
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.black.withValues(alpha: 0.5)),
+                        border: Border.all(color: Colors.grey[60]),
                       ),
                       child: Text(
                         TemplatePreviewService.generatePreview(

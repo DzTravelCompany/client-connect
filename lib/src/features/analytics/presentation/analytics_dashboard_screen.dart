@@ -7,6 +7,7 @@ import '../data/analytics_models.dart';
 import 'widgets/stats_card.dart';
 import 'widgets/client_growth_chart.dart';
 import 'widgets/message_type_pie_chart.dart';
+
 class AnalyticsDashboardScreen extends ConsumerStatefulWidget {
   const AnalyticsDashboardScreen({super.key});
 

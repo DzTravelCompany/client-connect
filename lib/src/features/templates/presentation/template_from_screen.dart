@@ -1,15 +1,19 @@
-import 'dart:async';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../data/template_model.dart';
+import '../data/template_block_model.dart';
 import '../logic/template_providers.dart';
 import '../../clients/logic/client_providers.dart';
+
 
 class TemplateFormScreen extends ConsumerStatefulWidget {
   final int? templateId;
   
-  const TemplateFormScreen({super.key, this.templateId});
+  const TemplateFormScreen({
+    super.key,
+    this.templateId,
+  });
 
   @override
   ConsumerState<TemplateFormScreen> createState() => _TemplateFormScreenState();
@@ -21,235 +25,347 @@ class _TemplateFormScreenState extends ConsumerState<TemplateFormScreen> {
   final _subjectController = TextEditingController();
   final _bodyController = TextEditingController();
   
-  Timer? _autosaveTimer;
-  bool _isInitialized = false;
+  TemplateType _selectedType = TemplateType.email;
+  List<TemplateBlock> _blocks = [];
+  bool _isLoading = false;
   bool _hasUnsavedChanges = false;
-  String _selectedType = 'email';
-  TemplateModel? _originalTemplate;
 
   @override
   void initState() {
     super.initState();
-    _setupFormListeners();
-  }
-
-  @override
-  void dispose() {
-    _autosaveTimer?.cancel();
-    _nameController.dispose();
-    _subjectController.dispose();
-    _bodyController.dispose();
-    super.dispose();
-  }
-
-  void _setupFormListeners() {
-    final controllers = [_nameController, _subjectController, _bodyController];
-    for (final controller in controllers) {
-      controller.addListener(_onFormChanged);
+    if (widget.templateId != null) {
+      _loadTemplate();
+    } else {
+      // Initialize with a default text block
+      _blocks = [
+        TextBlock(
+          id: 'default-text',
+          text: '',
+        ),
+      ];
     }
   }
 
-  void _onFormChanged() {
-    if (!_isInitialized) return;
+  Future<void> _loadTemplate() async {
+    setState(() => _isLoading = true);
     
-    setState(() {
-      _hasUnsavedChanges = true;
-    });
-    
-    _autosaveTimer?.cancel();
-    _autosaveTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted && _hasUnsavedChanges) {
-        _performAutosave();
+    try {
+      final template = await ref.read(templateDaoProvider).getTemplateById(widget.templateId!);
+      if (template != null) {
+        _nameController.text = template.name;
+        _subjectController.text = template.subject ?? '';
+        _bodyController.text = template.body;
+        _selectedType = template.templateType;
+        _blocks = template.blocks.isNotEmpty ? template.blocks : [
+          TextBlock(
+            id: 'legacy-text',
+            text: template.body,
+          ),
+        ];
       }
-    });
+    } catch (e) {
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => ContentDialog(
+            title: const Text('Error'),
+            content: Text('Failed to load template: $e'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
-  Future<void> _performAutosave() async {
-    if (!_formKey.currentState!.validate()) return;
-    
-    final template = _buildTemplateFromForm();
-    await ref.read(templateFormProvider.notifier).saveTemplate(template);
-    
-    if (mounted) {
-      setState(() {
-        _hasUnsavedChanges = false;
-      });
+  void _onFieldChanged() {
+    if (!_hasUnsavedChanges) {
+      setState(() => _hasUnsavedChanges = true);
     }
   }
 
   TemplateModel _buildTemplateFromForm() {
+    // Update the text block with current body content
+    final updatedBlocks = _blocks.map((block) {
+      if (block is TextBlock && block.id == 'default-text' || block.id == 'legacy-text') {
+        return TextBlock(
+          id: block.id,
+          text: _bodyController.text,
+        );
+      }
+      return block;
+    }).toList();
+
     return TemplateModel(
       id: widget.templateId ?? 0,
       name: _nameController.text.trim(),
-      type: _selectedType,
-      subject: _selectedType == 'email' ? _subjectController.text.trim() : null,
-      body: _bodyController.text.trim(),
-      createdAt: _originalTemplate?.createdAt ?? DateTime.now(),
+      subject: _selectedType == TemplateType.email ? _subjectController.text.trim() : null,
+      body: _bodyController.text.trim(), // Keep for backward compatibility
+      templateType: _selectedType,
+      blocks: updatedBlocks,
+      isEmail: _selectedType == TemplateType.email,
+      createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
   }
 
-  void _populateForm(TemplateModel template) {
-    _nameController.text = template.name;
-    _subjectController.text = template.subject ?? '';
-    _bodyController.text = template.body;
-    _selectedType = template.type;
-    _originalTemplate = template;
-    _isInitialized = true;
+  Future<void> _saveTemplate() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final template = _buildTemplateFromForm();
+      final templateDao = ref.read(templateDaoProvider);
+
+      if (widget.templateId != null) {
+        await templateDao.updateTemplate(template);
+      } else {
+        await templateDao.createTemplate(template);
+      }
+
+      setState(() => _hasUnsavedChanges = false);
+
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => ContentDialog(
+            title: const Text('Success'),
+            content: const Text('Template saved successfully!'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        if (mounted){
+          context.go('/templates');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => ContentDialog(
+            title: const Text('Error'),
+            content: Text('Failed to save template: $e'),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Widget _buildTemplateTypeSelector() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Template Type',
+              style: FluentTheme.of(context).typography.subtitle,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                RadioButton(
+                  checked: _selectedType == TemplateType.email,
+                  onChanged: (value) {
+                    if (value == true) {
+                      setState(() => _selectedType = TemplateType.email);
+                      _onFieldChanged();
+                    }
+                  },
+                  content: const Text('Email Template'),
+                ),
+                const SizedBox(width: 16),
+                RadioButton(
+                  checked: _selectedType == TemplateType.whatsapp,
+                  onChanged: (value) {
+                    if (value == true) {
+                      setState(() => _selectedType = TemplateType.whatsapp);
+                      _onFieldChanged();
+                    }
+                  },
+                  content: const Text('WhatsApp Template'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormField({
+    required TextEditingController controller,
+    required String label,
+    String? placeholder,
+    int maxLines = 1,
+    String? Function(String?)? validator,
+  }) {
+    return InfoLabel(
+      label: label,
+      child: TextFormBox(
+        controller: controller,
+        placeholder: placeholder,
+        maxLines: maxLines,
+        validator: validator,
+        onChanged: (_) => _onFieldChanged(),
+      ),
+    );
+  }
+
+  Widget _buildPreviewSection() {
+    final clients = ref.watch(allClientsProvider);
+    
+    return clients.when(
+      data: (clientList) {
+        if (clientList.isEmpty) {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Text(
+                    'Preview',
+                    style: FluentTheme.of(context).typography.subtitle,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('No clients available for preview. Add some clients first.'),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final sampleClient = clientList.first;
+        final currentTemplate = _buildTemplateFromForm();
+        final preview = TemplatePreviewService.generatePreview(
+          currentTemplate,
+          sampleClient,
+        );
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Preview',
+                  style: FluentTheme.of(context).typography.subtitle,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Preview for: ${sampleClient.fullName}',
+                  style: FluentTheme.of(context).typography.caption,
+                ),
+                const SizedBox(height: 8),
+                if (_selectedType == TemplateType.email && _subjectController.text.isNotEmpty) ...[
+                  Text(
+                    'Subject: ${_subjectController.text}',
+                    style: FluentTheme.of(context).typography.body?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: FluentTheme.of(context).resources.cardBackgroundFillColorDefault,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: FluentTheme.of(context).resources.cardStrokeColorDefault,
+                    ),
+                  ),
+                  child: Text(
+                    preview.isNotEmpty ? preview : 'Enter template content to see preview...',
+                    style: FluentTheme.of(context).typography.body,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      loading: () => const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: ProgressRing(),
+        ),
+      ),
+      error: (error, stack) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text('Error loading clients: $error'),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final formState = ref.watch(templateFormProvider);
-    final isEditing = widget.templateId != null;
-    final clientsAsync = ref.watch(allClientsProvider);
-
-    // Load existing template data if editing
-    if (isEditing && !_isInitialized) {
-      ref.watch(templateByIdProvider(widget.templateId!)).whenData((template) {
-        if (template != null && !_isInitialized) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _populateForm(template);
-          });
-        }
-      });
-    } else if (!isEditing && !_isInitialized) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        setState(() {
-          _isInitialized = true;
-        });
-      });
-    }
-
     return ScaffoldPage(
       header: PageHeader(
-        title: Text(isEditing ? 'Edit Template' : 'Add Template'),
+        title: Text(widget.templateId != null ? 'Edit Template' : 'Create Template'),
         commandBar: CommandBar(
           primaryItems: [
             CommandBarButton(
               icon: const Icon(FluentIcons.save),
               label: const Text('Save'),
-              onPressed: formState.isLoading ? null : _saveTemplate,
+              onPressed: _isLoading ? null : _saveTemplate,
+            ),
+            CommandBarButton(
+              icon: const Icon(FluentIcons.cancel),
+              label: const Text('Cancel'),
+              onPressed: () => context.go('/templates'),
             ),
           ],
         ),
       ),
-      content: Row(
-        children: [
-          // Form Section
-          Expanded(
-            flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  // Status indicator
-                  if (formState.isLoading || _hasUnsavedChanges || formState.isSaved)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: _getStatusColor(formState),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Row(
-                        children: [
-                          if (formState.isLoading) ...[
-                            const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: ProgressRing(strokeWidth: 2),
-                            ),
-                            const SizedBox(width: 8),
-                            const Text('Saving...', style: TextStyle(color: Colors.white)),
-                          ] else if (_hasUnsavedChanges) ...[
-                            const Icon(FluentIcons.edit, size: 16, color: Colors.white),
-                            const SizedBox(width: 8),
-                            const Text('Unsaved changes', style: TextStyle(color: Colors.white)),
-                          ] else if (formState.isSaved) ...[
-                            const Icon(FluentIcons.check_mark, size: 16, color: Colors.white),
-                            const SizedBox(width: 8),
-                            const Text('Saved', style: TextStyle(color: Colors.white)),
-                          ],
-                        ],
-                      ),
-                    ),
-
-                  // Error message
-                  if (formState.error != null)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(FluentIcons.error, size: 16, color: Colors.white),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Save failed: ${formState.error}',
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                  // Form
-                  Expanded(
-                    child: Form(
-                      key: _formKey,
-                      child: SingleChildScrollView(
+      content: _isLoading
+          ? const Center(child: ProgressRing())
+          : SingleChildScrollView(
+            child: Form(
+                key: _formKey,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Left column - Form
+                      Expanded(
+                        flex: 2,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Template Type Selection
-                            Text('Template Type', style: FluentTheme.of(context).typography.body),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: RadioButton(
-                                    checked: _selectedType == 'email',
-                                    onChanged: (value) {
-                                      if (value == true) {
-                                        setState(() {
-                                          _selectedType = 'email';
-                                        });
-                                        _onFormChanged();
-                                      }
-                                    },
-                                    content: const Text('Email Template'),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: RadioButton(
-                                    checked: _selectedType == 'whatsapp',
-                                    onChanged: (value) {
-                                      if (value == true) {
-                                        setState(() {
-                                          _selectedType = 'whatsapp';
-                                        });
-                                        _onFormChanged();
-                                      }
-                                    },
-                                    content: const Text('WhatsApp Template'),
-                                  ),
-                                ),
-                              ],
-                            ),
+                            _buildTemplateTypeSelector(),
+                            const SizedBox(height: 16),
                             
-                            const SizedBox(height: 24),
-                            
-                            // Template Name
-                            _buildTextFormField(
+                            _buildFormField(
                               controller: _nameController,
                               label: 'Template Name *',
+                              placeholder: 'Enter template name',
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
                                   return 'Template name is required';
@@ -260,19 +376,19 @@ class _TemplateFormScreenState extends ConsumerState<TemplateFormScreen> {
                             
                             const SizedBox(height: 16),
                             
-                            // Email Subject (only for email templates)
-                            if (_selectedType == 'email') ...[
-                              _buildTextFormField(
+                            if (_selectedType == TemplateType.email) ...[
+                              _buildFormField(
                                 controller: _subjectController,
                                 label: 'Email Subject',
+                                placeholder: 'Enter email subject',
                               ),
                               const SizedBox(height: 16),
                             ],
                             
-                            // Template Body
-                            _buildTextFormField(
+                            _buildFormField(
                               controller: _bodyController,
                               label: 'Message Body *',
+                              placeholder: 'Enter your message here...\n\nUse placeholders like {{first_name}}, {{last_name}}, {{email}}, etc.',
                               maxLines: 10,
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
@@ -284,209 +400,76 @@ class _TemplateFormScreenState extends ConsumerState<TemplateFormScreen> {
                             
                             const SizedBox(height: 16),
                             
-                            // Available Placeholders
-                            _buildPlaceholdersSection(),
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Available Placeholders',
+                                      style: FluentTheme.of(context).typography.subtitle,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      children: [
+                                        '{{first_name}}',
+                                        '{{last_name}}',
+                                        '{{full_name}}',
+                                        '{{email}}',
+                                        '{{phone}}',
+                                        '{{job_title}}',
+                                        '{{company}}',
+                                      ].map((placeholder) => Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: FluentTheme.of(context).accentColor.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(
+                                            color: FluentTheme.of(context).accentColor.withValues(alpha: 0.3),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          placeholder,
+                                          style: FluentTheme.of(context).typography.caption?.copyWith(
+                                            fontFamily: 'Consolas',
+                                          ),
+                                        ),
+                                      )).toList(),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          // Preview Section
-          Expanded(
-            flex: 1,
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(color: Colors.grey[60]),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Preview',
-                      style: FluentTheme.of(context).typography.subtitle,
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: clientsAsync.when(
-                        data: (clients) {
-                          if (clients.isEmpty) {
-                            return const Center(
-                              child: Text('Add a client to see preview'),
-                            );
-                          }
-                          
-                          final sampleClient = clients.first;
-                          final currentTemplate = _buildTemplateFromForm();
-                          final preview = TemplatePreviewService.generatePreview(
-                            currentTemplate,
-                            sampleClient,
-                          );
-                          
-                          return Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[10],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey[40]),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Preview for: ${sampleClient.fullName}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                if (_selectedType == 'email' && _subjectController.text.isNotEmpty) ...[
-                                  Text(
-                                    'Subject: ${_subjectController.text}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const Divider(),
-                                ],
-                                Expanded(
-                                  child: SingleChildScrollView(
-                                    child: Text(
-                                      preview,
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                        loading: () => const Center(child: ProgressRing()),
-                        error: (error, stack) => Center(
-                          child: Text('Error loading preview: $error'),
-                        ),
+                      
+                      const SizedBox(width: 16),
+                      
+                      // Right column - Preview
+                      Expanded(
+                        flex: 1,
+                        child: _buildPreviewSection(),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTextFormField({
-    required TextEditingController controller,
-    required String label,
-    String? Function(String?)? validator,
-    int maxLines = 1,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: FluentTheme.of(context).typography.body),
-        const SizedBox(height: 4),
-        TextFormBox(
-          controller: controller,
-          validator: validator,
-          maxLines: maxLines,
-          expands: false,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPlaceholdersSection() {
-    final placeholders = TemplatePreviewService.getAvailablePlaceholders();
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Available Placeholders',
-          style: FluentTheme.of(context).typography.body,
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: placeholders.map((placeholder) {
-            return GestureDetector(
-              onTap: () {
-                final currentText = _bodyController.text;
-                final selection = _bodyController.selection;
-                final newText = currentText.replaceRange(
-                  selection.start,
-                  selection.end,
-                  placeholder,
-                );
-                _bodyController.text = newText;
-                _bodyController.selection = TextSelection.collapsed(
-                  offset: selection.start + placeholder.length,
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: FluentTheme.of(context).accentColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: FluentTheme.of(context).accentColor.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Text(
-                  placeholder,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: FluentTheme.of(context).accentColor,
+                    ],
                   ),
                 ),
               ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Click on a placeholder to insert it at cursor position',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[100],
-            fontStyle: FontStyle.italic,
           ),
-        ),
-      ],
     );
   }
 
-  Color _getStatusColor(TemplateFormState formState) {
-    if (formState.isLoading) return Colors.blue;
-    if (_hasUnsavedChanges) return Colors.orange;
-    if (formState.isSaved) return Colors.green;
-    return Colors.grey;
-  }
-
-  Future<void> _saveTemplate() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final template = _buildTemplateFromForm();
-    await ref.read(templateFormProvider.notifier).saveTemplate(template);
-
-    final formState = ref.read(templateFormProvider);
-    if (formState.error == null && mounted) {
-      context.go('/templates');
-    }
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _subjectController.dispose();
+    _bodyController.dispose();
+    super.dispose();
   }
 }

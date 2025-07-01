@@ -1,64 +1,217 @@
+import 'package:client_connect/src/features/templates/data/template_block_model.dart';
 import 'package:drift/drift.dart';
 import '../../../core/models/database.dart';
 import '../../../core/services/database_service.dart';
 import 'template_model.dart';
 
-class TemplateDao {
-  final AppDatabase _db = DatabaseService.instance.database;
 
-  // Watch all templates
-  Stream<List<TemplateModel>> watchAllTemplates() {
-    return _db.select(_db.templates).watch().map(
-      (rows) => rows.map((row) => _templateFromRow(row)).toList(),
-    );
+class TemplateDao {
+  final AppDatabase _database = DatabaseService.instance.database;
+
+  // Get all templates
+  Future<List<TemplateModel>> getAllTemplates() async {
+    final templates = await _database.select(_database.templates).get();
+    return templates.map((template) => TemplateModel.fromDatabase(template)).toList();
   }
 
-  // Watch templates by type
-  Stream<List<TemplateModel>> watchTemplatesByType(String type) {
-    final query = _db.select(_db.templates)..where((t) => t.type.equals(type));
-    return query.watch().map(
-      (rows) => rows.map((row) => _templateFromRow(row)).toList(),
-    );
+  // Get templates by type
+  Future<List<TemplateModel>> watchTemplatesByType(TemplateType type) async {
+    final typeString = type == TemplateType.whatsapp ? 'whatsapp' : 'email';
+    final templates = await (_database.select(_database.templates)
+          ..where((t) => t.templateType.equals(typeString)))
+        .get();
+    return templates.map((template) => TemplateModel.fromDatabase(template)).toList();
   }
 
   // Get template by ID
   Future<TemplateModel?> getTemplateById(int id) async {
-    final query = _db.select(_db.templates)..where((t) => t.id.equals(id));
-    final row = await query.getSingleOrNull();
-    return row != null ? _templateFromRow(row) : null;
+    final template = await (_database.select(_database.templates)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    
+    if (template == null) return null;
+    return TemplateModel.fromDatabase(template);
   }
 
-  // Insert new template
-  Future<int> insertTemplate(TemplatesCompanion template) async {
-    return await _db.into(_db.templates).insert(template);
+  // Create new template
+  Future<TemplateModel> createTemplate(TemplateModel template) async {
+    final id = await _database.into(_database.templates).insert(template.toDatabase());
+    
+    // Return the created template with the new ID
+    final createdTemplate = await getTemplateById(id);
+    return createdTemplate!;
   }
 
   // Update existing template
-  Future<bool> updateTemplate(int id, TemplatesCompanion template) async {
-    final query = _db.update(_db.templates)..where((t) => t.id.equals(id));
-    final updatedRows = await query.write(template.copyWith(
-      updatedAt: Value(DateTime.now()),
-    ));
-    return updatedRows > 0;
+  Future<TemplateModel> updateTemplate(TemplateModel template) async {
+    await (_database.update(_database.templates)
+          ..where((t) => t.id.equals(template.id)))
+        .write(template.toDatabaseUpdate());
+    
+    // Return the updated template
+    final updatedTemplate = await getTemplateById(template.id);
+    return updatedTemplate!;
   }
 
   // Delete template
   Future<bool> deleteTemplate(int id) async {
-    final query = _db.delete(_db.templates)..where((t) => t.id.equals(id));
-    final deletedRows = await query.go();
+    final deletedRows = await (_database.delete(_database.templates)
+          ..where((t) => t.id.equals(id)))
+        .go();
+    
     return deletedRows > 0;
   }
 
-  // Helper method to convert database row to TemplateModel
-  TemplateModel _templateFromRow(Template row) {
-    return TemplateModel(
-      id: row.id,
-      name: row.name,
-      type: row.type,
-      subject: row.subject,
-      body: row.body,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
+  // Duplicate template
+  Future<TemplateModel> duplicateTemplate(int id) async {
+    final originalTemplate = await getTemplateById(id);
+    if (originalTemplate == null) {
+      throw Exception('Template not found');
+    }
+
+    // Create a copy with a new name
+    final duplicatedTemplate = originalTemplate.copyWith(
+      name: '${originalTemplate.name} (Copy)',
     );
+
+    // Remove the ID so it gets a new one when inserted
+    final newTemplate = TemplateModel(
+      id: 0, // Will be ignored during insertion
+      name: duplicatedTemplate.name,
+      subject: duplicatedTemplate.subject,
+      body: duplicatedTemplate.body,
+      templateType: duplicatedTemplate.templateType,
+      blocks: duplicatedTemplate.blocks,
+      isEmail: duplicatedTemplate.isEmail,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    return await createTemplate(newTemplate);
+  }
+
+  // Search templates by name
+  Future<List<TemplateModel>> searchTemplates(String query) async {
+    final templates = await (_database.select(_database.templates)
+          ..where((t) => t.name.like('%$query%')))
+        .get();
+    return templates.map((template) => TemplateModel.fromDatabase(template)).toList();
+  }
+
+  // Get recent templates (last 10)
+  Future<List<TemplateModel>> getRecentTemplates({int limit = 10}) async {
+    final templates = await (_database.select(_database.templates)
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
+          ..limit(limit))
+        .get();
+    return templates.map((template) => TemplateModel.fromDatabase(template)).toList();
+  }
+
+  // Get template count
+  Future<int> getTemplateCount() async {
+    final count = await _database.customSelect(
+      'SELECT COUNT(*) as count FROM templates',
+      readsFrom: {_database.templates},
+    ).getSingle();
+    return count.data['count'] as int;
+  }
+
+  // Get template count by type
+  Future<int> getTemplateCountByType(TemplateType type) async {
+    final typeString = type == TemplateType.whatsapp ? 'whatsapp' : 'email';
+    final count = await _database.customSelect(
+      'SELECT COUNT(*) as count FROM templates WHERE template_type = ?',
+      variables: [Variable.withString(typeString)],
+      readsFrom: {_database.templates},
+    ).getSingle();
+    return count.data['count'] as int;
+  }
+
+  // Check if template name exists
+  Future<bool> templateNameExists(String name, {int? excludeId}) async {
+    var query = _database.select(_database.templates)
+      ..where((t) => t.name.equals(name));
+    
+    if (excludeId != null) {
+      query = query..where((t) => t.id.equals(excludeId).not());
+    }
+    
+    final template = await query.getSingleOrNull();
+    return template != null;
+  }
+
+  // Batch operations
+  Future<void> deleteMultipleTemplates(List<int> ids) async {
+    await _database.batch((batch) {
+      for (final id in ids) {
+        batch.deleteWhere(_database.templates, (t) => t.id.equals(id));
+      }
+    });
+  }
+
+  // Export templates (get all data for backup)
+  Future<List<Map<String, dynamic>>> exportTemplates() async {
+    final templates = await _database.select(_database.templates).get();
+    return templates.map((template) => {
+      'id': template.id,
+      'name': template.name,
+      'subject': template.subject,
+      'body': template.body,
+      'template_type': template.templateType,
+      'blocks_json': template.blocksJson,
+      'is_email': template.isEmail,
+      'created_at': template.createdAt.toIso8601String(),
+      'updated_at': template.updatedAt.toIso8601String(),
+    }).toList();
+  }
+
+  // Import templates (restore from backup)
+  Future<void> importTemplates(List<Map<String, dynamic>> templatesData) async {
+    await _database.batch((batch) {
+      for (final templateData in templatesData) {
+        batch.insert(
+          _database.templates,
+          TemplatesCompanion.insert(
+            name: templateData['name'],
+            subject: Value(templateData['subject']),
+            body: templateData['body'],
+            templateType: Value(templateData['template_type']),
+            blocksJson: Value(templateData['blocks_json']),
+            isEmail: Value(templateData['is_email']),
+            createdAt: Value(DateTime.parse(templateData['created_at'])),
+            updatedAt: Value(DateTime.parse(templateData['updated_at'])),
+          ),
+        );
+      }
+    });
+  }
+
+  // Clean up orphaned template blocks (if using separate blocks table)
+  Future<void> cleanupOrphanedBlocks() async {
+    await _database.customStatement(
+      'DELETE FROM template_blocks WHERE template_id NOT IN (SELECT id FROM templates)',
+    );
+  }
+
+  // Get templates with block statistics
+  Future<List<Map<String, dynamic>>> getTemplatesWithStats() async {
+    final templates = await getAllTemplates();
+    
+    return templates.map((template) {
+      final blockTypeCounts = <String, int>{};
+      for (final block in template.blocks) {
+        final typeName = block.type.name;
+        blockTypeCounts[typeName] = (blockTypeCounts[typeName] ?? 0) + 1;
+      }
+      
+      return {
+        'template': template,
+        'block_count': template.blocks.length,
+        'block_types': blockTypeCounts,
+        'has_placeholders': template.blocks.any((b) => b.type == TemplateBlockType.placeholder),
+        'has_images': template.blocks.any((b) => b.type == TemplateBlockType.image),
+        'has_buttons': template.blocks.any((b) => b.type == TemplateBlockType.button),
+      };
+    }).toList();
   }
 }
