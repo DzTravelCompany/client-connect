@@ -1,4 +1,6 @@
 import 'package:client_connect/src/features/templates/data/template_block_model.dart';
+import 'package:client_connect/src/features/templates/data/template_dao.dart';
+import 'package:client_connect/src/features/templates/data/template_model.dart';
 import 'package:client_connect/src/features/templates/logic/tempalte_editor_providers.dart';
 import 'package:client_connect/src/features/templates/presentation/widgets/editor_canvas.dart';
 import 'package:client_connect/src/features/templates/presentation/widgets/editor_inspector.dart';
@@ -21,6 +23,7 @@ class TemplateEditorScreen extends ConsumerStatefulWidget {
 class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _subjectController;
+  final TemplateDao _templateDao = TemplateDao();
 
   @override
   void initState() {
@@ -44,38 +47,54 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
   }
 
   void _loadTemplate() async {
-    // TODO: Implement template loading from database
+
     ref.read(templateEditorProvider.notifier).setLoading(true);
     
     try {
-      // Simulate loading
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      // For now, load sample data
-      final sampleBlocks = [
-        TextBlock(
-          id: 'sample-1',
-          text: 'Welcome to our newsletter!',
-          fontSize: 24.0,
-          fontWeight: 'bold',
-        ),
-        ImageBlock(
-          id: 'sample-2',
-          imageUrl: '/placeholder.svg?height=200&width=400',
-          width: 400,
-          height: 200,
-        ),
-      ];
-      
-      ref.read(templateEditorProvider.notifier).loadTemplate(
-        blocks: sampleBlocks,
-        templateType: TemplateType.email,
-        templateName: 'Sample Template',
-        templateSubject: 'Sample Subject',
-      );
-      
-      _nameController.text = 'Sample Template';
-      _subjectController.text = 'Sample Subject';
+
+      if (widget.templateId != null) {
+        final template = await _templateDao.getTemplateById(widget.templateId!);
+        if (template != null) {
+          ref.read(templateEditorProvider.notifier).loadTemplate(
+            blocks: template.blocks,
+            templateType: template.type == "email" ? TemplateType.email : TemplateType.whatsapp,
+            templateName: template.name,
+            templateSubject: template.subject ?? '',
+          );
+          _nameController.text = template.name;
+          _subjectController.text = template.subject ?? '';
+        } else {
+          ref.read(templateEditorProvider.notifier).setError('Template not found');
+        }
+      } else {
+        // This case should ideally not happen if templateId is null,
+        // but as a fallback, we can load empty or default.
+        // For now, matching existing behavior of loading sample if no ID.
+        final sampleBlocks = [
+          TextBlock(
+            id: 'sample-1',
+            text: 'Welcome to our newsletter!',
+            fontSize: 24.0,
+            fontWeight: 'bold',
+          ),
+          ImageBlock(
+            id: 'sample-2',
+            imageUrl: '/placeholder.svg?height=200&width=400',
+            width: 400,
+            height: 200,
+          ),
+        ];
+        
+        ref.read(templateEditorProvider.notifier).loadTemplate(
+          blocks: sampleBlocks,
+          templateType: TemplateType.email,
+          templateName: 'Sample Template',
+          templateSubject: 'Sample Subject',
+        );
+        
+        _nameController.text = 'Sample Template';
+        _subjectController.text = 'Sample Subject';
+      }
     } catch (e) {
       ref.read(templateEditorProvider.notifier).setError('Failed to load template: $e');
     }
@@ -359,7 +378,8 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
             FilledButton(
               child: const Text('Save'),
               onPressed: () async {
-                Navigator.of(context).pop();
+                context.go('/templates');
+                //Navigator.of(context).pop();
                 _saveTemplate(context);
                 if (context.mounted) {
                   context.pop();
@@ -370,47 +390,150 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
         ),
       );
     } else {
-      context.pop();
+      context.go('/templates');
     }
   }
 
   void _saveTemplate(BuildContext context) async {
+
     final state = ref.read(templateEditorProvider);
     
-    if (state.templateName.isEmpty) {
-      displayInfoBar(
-        context,
-        builder: (context, close) => InfoBar(
-          title: const Text('Template Name Required'),
-          content: const Text('Please enter a name for your template.'),
-          severity: InfoBarSeverity.warning,
-          onClose: close,
-        ),
-      );
-      return;
-    }
 
     ref.read(templateEditorProvider.notifier).setLoading(true);
     
     try {
-      // TODO: Implement actual save functionality
-      await Future.delayed(const Duration(milliseconds: 1000));
-      
+
+      // Create template model from current state
+      final templateModel = TemplateModel(
+        id: widget.templateId ?? 0, // Will be ignored for new templates
+        name: state.templateName.trim(),
+        subject: state.templateType == TemplateType.email ? state.templateSubject.trim() : null,
+        body: '', // Will be generated from blocks
+        templateType: state.templateType,
+        blocks: state.blocks,
+        isEmail: state.templateType == TemplateType.email,
+        createdAt: state.createdAt ?? DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      final validationErrors = templateModel.validate();
+      if (validationErrors.isNotEmpty) {
+        if (context.mounted) {
+          displayInfoBar(
+            context,
+            builder: (context, close) => InfoBar(
+              title: const Text('Validation Error'),
+              content: Text(validationErrors.first),
+              severity: InfoBarSeverity.warning,
+              onClose: close,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check for duplicate names (only for new templates or when name changed)
+      if (widget.templateId == null) {
+        final nameExists = await _templateDao.templateNameExists(templateModel.name);
+        if (nameExists) {
+          if (context.mounted) {
+            displayInfoBar(
+              context,
+              builder: (context, close) => InfoBar(
+                title: const Text('Duplicate Name'),
+                content: Text('A template with the name "${templateModel.name}" already exists.'),
+                severity: InfoBarSeverity.warning,
+                onClose: close,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      // Performance warning for large templates
+      if (templateModel.isLargeTemplate && context.mounted) {
+        final shouldContinue = await showDialog<bool>(
+          context: context,
+          builder: (context) => ContentDialog(
+            title: const Text('Large Template Warning'),
+            content: Text(
+              'This template is quite large (${(templateModel.estimatedSize / 1024).toStringAsFixed(1)}KB). '
+              'Large templates may take longer to load and send. Do you want to continue saving?'
+            ),
+            actions: [
+              Button(
+                child: const Text('Cancel'),
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+              FilledButton(
+                child: const Text('Save Anyway'),
+                onPressed: () => Navigator.of(context).pop(true),
+              ),
+            ],
+          ),
+        );
+
+        if (shouldContinue != true) {
+          return;
+        }
+      }
+
+      if (widget.templateId == null) {
+        // Creating new template
+        await _templateDao.createTemplate(templateModel);
+        
+        if (context.mounted) {
+          displayInfoBar(
+            context,
+            builder: (context, close) => InfoBar(
+              title: const Text('Template Created'),
+              content: Text('Template "${templateModel.name}" has been created successfully.'),
+              severity: InfoBarSeverity.success,
+              onClose: close,
+            ),
+          );
+        }
+      } else {
+        // Updating existing template
+        try {
+          await _templateDao.updateTemplate(templateModel);
+        } catch (e) {
+          throw Exception('Failed to update template in database ${e.toString()}');
+        }
+        
+        
+        if (context.mounted) {
+          displayInfoBar(
+            context,
+            builder: (context, close) => InfoBar(
+              title: const Text('Template Updated'),
+              content: Text('Template "${templateModel.name}" has been updated successfully.'),
+              severity: InfoBarSeverity.success,
+              onClose: close,
+            ),
+          );
+        }
+      }
+
       ref.read(templateEditorProvider.notifier).markSaved();
+
+    } catch (e) {
+      ref.read(templateEditorProvider.notifier).setError('Failed to save template: ${e.toString()}');
       
       if (context.mounted) {
         displayInfoBar(
           context,
           builder: (context, close) => InfoBar(
-            title: const Text('Template Saved'),
-            content: const Text('Your template has been saved successfully.'),
-            severity: InfoBarSeverity.success,
+            title: const Text('Save Failed'),
+            content: Text('Failed to save template: ${e.toString()}'),
+            severity: InfoBarSeverity.error,
             onClose: close,
           ),
         );
       }
-    } catch (e) {
-      ref.read(templateEditorProvider.notifier).setError('Failed to save template: $e');
+    } finally {
+      ref.read(templateEditorProvider.notifier).setLoading(false);
     }
   }
 

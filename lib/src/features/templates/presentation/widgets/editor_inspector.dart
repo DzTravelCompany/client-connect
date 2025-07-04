@@ -3,8 +3,6 @@ import 'package:client_connect/src/features/templates/logic/tempalte_editor_prov
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-
-
 class EditorInspector extends ConsumerWidget {
   const EditorInspector({super.key});
 
@@ -50,14 +48,14 @@ class EditorInspector extends ConsumerWidget {
         ),
         Expanded(
           child: editorState.selectedBlock == null
-              ? _buildNoSelectionState(context, theme)
-              : _buildInspectorContent(context, ref, editorState.selectedBlock!, theme),
+              ? _buildNoSelectionState(context, theme, editorState)
+              : _buildInspectorContent(context, ref, editorState.selectedBlock!, theme, editorState),
         ),
       ],
     );
   }
 
-  Widget _buildNoSelectionState(BuildContext context, FluentThemeData theme) {
+  Widget _buildNoSelectionState(BuildContext context, FluentThemeData theme, TemplateEditorState state) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -71,28 +69,101 @@ class EditorInspector extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(50),
               ),
               child: Icon(
-                FluentIcons.drag_object,
+                state.isPreviewMode ? FluentIcons.preview : FluentIcons.drag_object,
                 size: 48,
                 color: theme.inactiveColor,
               ),
             ),
             const SizedBox(height: 20),
             Text(
-              'No block selected',
+              state.isPreviewMode ? 'Preview Mode Active' : 'No block selected',
               style: theme.typography.subtitle?.copyWith(
                 color: theme.inactiveColor,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Select a block from the canvas to edit its properties',
+              state.isPreviewMode 
+                  ? 'Switch to edit mode to modify block properties'
+                  : 'Select a block from the canvas to edit its properties',
               style: theme.typography.body?.copyWith(
                 color: theme.inactiveColor,
               ),
               textAlign: TextAlign.center,
             ),
+            if (state.usedPlaceholders.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              _buildPreviewDataSection(context, theme, state),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewDataSection(BuildContext context, FluentThemeData theme, TemplateEditorState state) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.accentColor.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.accentColor.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                FluentIcons.variable,
+                size: 16,
+                color: theme.accentColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Preview Data',
+                style: theme.typography.bodyStrong?.copyWith(
+                  color: theme.accentColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...state.usedPlaceholders.map((placeholder) {
+            final sampleValue = PlaceholderManager.getSampleValue(placeholder);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      '{{$placeholder}}',
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        color: theme.accentColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      sampleValue,
+                      style: theme.typography.caption?.copyWith(
+                        color: theme.inactiveColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
@@ -102,6 +173,7 @@ class EditorInspector extends ConsumerWidget {
     WidgetRef ref,
     TemplateBlock block,
     FluentThemeData theme,
+    TemplateEditorState state,
   ) {
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -109,6 +181,11 @@ class EditorInspector extends ConsumerWidget {
         _buildBlockInfo(context, block, theme),
         const SizedBox(height: 20),
         _buildBlockProperties(context, ref, block, theme),
+        if ((block is TextBlock && block.hasPlaceholders) || 
+            (block is RichTextBlock && block.hasPlaceholders)) ...[
+          const SizedBox(height: 20),
+          _buildPlaceholderInfo(context, block, theme, state),
+        ],
       ],
     );
   }
@@ -161,6 +238,96 @@ class EditorInspector extends ConsumerWidget {
     );
   }
 
+  Widget _buildPlaceholderInfo(
+    BuildContext context, 
+    TemplateBlock block, 
+    FluentThemeData theme,
+    TemplateEditorState state,
+  ) {
+    List<String> placeholders = [];
+    if (block is TextBlock) {
+      placeholders = block.placeholders;
+    } else if (block is RichTextBlock) {
+      placeholders = block.placeholders;
+    }
+
+    if (placeholders.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.accentColor.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.accentColor.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                FluentIcons.variable,
+                size: 16,
+                color: theme.accentColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Placeholders in this block',
+                style: theme.typography.bodyStrong?.copyWith(
+                  color: theme.accentColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...placeholders.map((placeholder) {
+            final sampleValue = state.isPreviewMode 
+                ? state.previewData[placeholder] ?? '[MISSING]'
+                : PlaceholderManager.getSampleValue(placeholder);
+            
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.accentColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '{{$placeholder}}',
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            color: theme.accentColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Preview: $sampleValue',
+                          style: theme.typography.caption?.copyWith(
+                            color: theme.inactiveColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBlockProperties(
     BuildContext context,
     WidgetRef ref,
@@ -180,8 +347,6 @@ class EditorInspector extends ConsumerWidget {
         return _buildSpacerProperties(context, ref, block as SpacerBlock, theme);
       case TemplateBlockType.divider:
         return _buildDividerProperties(context, ref, block as DividerBlock, theme);
-      case TemplateBlockType.placeholder:
-        return _buildPlaceholderProperties(context, ref, block as PlaceholderBlock, theme);
       case TemplateBlockType.list:
         return _buildListProperties(context, ref, block as ListBlock, theme);
       case TemplateBlockType.qrCode:
@@ -211,6 +376,7 @@ class EditorInspector extends ConsumerWidget {
               block.text,
               (value) => _updateBlock(ref, block.id, {'text': value}),
               maxLines: 3,
+              hint: 'Use {{placeholder_name}} for dynamic content',
             ),
           ],
         ),
@@ -269,10 +435,11 @@ class EditorInspector extends ConsumerWidget {
               block.underline,
               (value) => _updateBlock(ref, block.id, {'underline': value}),
             ),
-            _buildColorPicker(
+            _buildEnhancedColorPicker(
               'Text Color',
               block.color,
               (value) => _updateBlock(ref, block.id, {'color': value}),
+              theme,
             ),
           ],
         ),
@@ -357,10 +524,11 @@ class EditorInspector extends ConsumerWidget {
               10.0,
               (value) => _updateBlock(ref, block.id, {'borderWidth': value}),
             ),
-            _buildColorPicker(
+            _buildEnhancedColorPicker(
               'Border Color',
               block.borderColor,
               (value) => _updateBlock(ref, block.id, {'borderColor': value}),
+              theme,
             ),
             _buildCheckbox(
               'Responsive',
@@ -433,20 +601,23 @@ class EditorInspector extends ConsumerWidget {
           theme,
           'Colors & Style',
           [
-            _buildColorPicker(
+            _buildEnhancedColorPicker(
               'Background Color',
               block.backgroundColor,
               (value) => _updateBlock(ref, block.id, {'backgroundColor': value}),
+              theme,
             ),
-            _buildColorPicker(
+            _buildEnhancedColorPicker(
               'Text Color',
               block.textColor,
               (value) => _updateBlock(ref, block.id, {'textColor': value}),
+              theme,
             ),
-            _buildColorPicker(
+            _buildEnhancedColorPicker(
               'Hover Color',
               block.hoverColor,
               (value) => _updateBlock(ref, block.id, {'hoverColor': value}),
+              theme,
             ),
             _buildSlider(
               'Border Radius',
@@ -506,56 +677,17 @@ class EditorInspector extends ConsumerWidget {
           100.0,
           (value) => _updateBlock(ref, block.id, {'width': value}),
         ),
-        _buildColorPicker(
+        _buildEnhancedColorPicker(
           'Color',
           block.color,
           (value) => _updateBlock(ref, block.id, {'color': value}),
+          theme,
         ),
         _buildDropdown(
           'Style',
           block.style,
           ['solid', 'dashed', 'dotted'],
           (value) => _updateBlock(ref, block.id, {'style': value}),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPlaceholderProperties(
-    BuildContext context,
-    WidgetRef ref,
-    PlaceholderBlock block,
-    FluentThemeData theme,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildPropertySection(
-          theme,
-          'Placeholder Settings',
-          [
-            _buildTextInput(
-              'Label',
-              block.label,
-              (value) => _updateBlock(ref, block.id, {'label': value}),
-            ),
-            _buildTextInput(
-              'Placeholder Key',
-              block.placeholderKey,
-              (value) => _updateBlock(ref, block.id, {'placeholderKey': value}),
-            ),
-            _buildTextInput(
-              'Default Value',
-              block.defaultValue,
-              (value) => _updateBlock(ref, block.id, {'defaultValue': value}),
-            ),
-            _buildDropdown(
-              'Data Type',
-              block.dataType,
-              ['text', 'number', 'date', 'boolean', 'email', 'url'],
-              (value) => _updateBlock(ref, block.id, {'dataType': value}),
-            ),
-          ],
         ),
       ],
     );
@@ -600,10 +732,11 @@ class EditorInspector extends ConsumerWidget {
               20.0,
               (value) => _updateBlock(ref, block.id, {'spacing': value}),
             ),
-            _buildColorPicker(
+            _buildEnhancedColorPicker(
               'Text Color',
               block.color,
               (value) => _updateBlock(ref, block.id, {'color': value}),
+              theme,
             ),
           ],
         ),
@@ -703,15 +836,17 @@ class EditorInspector extends ConsumerWidget {
               ['L', 'M', 'Q', 'H'],
               (value) => _updateBlock(ref, block.id, {'errorCorrectionLevel': value}),
             ),
-            _buildColorPicker(
+            _buildEnhancedColorPicker(
               'Foreground Color',
               block.foregroundColor,
               (value) => _updateBlock(ref, block.id, {'foregroundColor': value}),
+              theme,
             ),
-            _buildColorPicker(
+            _buildEnhancedColorPicker(
               'Background Color',
               block.backgroundColor,
               (value) => _updateBlock(ref, block.id, {'backgroundColor': value}),
+              theme,
             ),
           ],
         ),
@@ -844,13 +979,14 @@ class EditorInspector extends ConsumerWidget {
       children: [
         _buildPropertySection(
           theme,
-          'Rich Text Content',
+          'Content',
           [
             _buildTextInput(
               'HTML Content',
               block.htmlContent,
               (value) => _updateBlock(ref, block.id, {'htmlContent': value}),
               maxLines: 5,
+              hint: 'Use HTML tags and {{placeholder_name}} for dynamic content',
             ),
           ],
         ),
@@ -880,36 +1016,17 @@ class EditorInspector extends ConsumerWidget {
   }
 
   Widget _buildUnsupportedProperties(FluentThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          Icon(
-            FluentIcons.warning,
-            size: 32,
-            color: theme.inactiveColor,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Unsupported Block Type',
-            style: theme.typography.subtitle?.copyWith(
-              color: theme.inactiveColor,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Properties for this block type are not yet implemented.',
-            style: theme.typography.body?.copyWith(
-              color: theme.inactiveColor,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+    return Center(
+      child: Text(
+        'Properties for this block type are not yet supported',
+        style: theme.typography.body?.copyWith(
+          color: theme.inactiveColor,
+        ),
       ),
     );
   }
 
-  // Helper widgets
+  // Helper methods for building property controls
   Widget _buildPropertySection(
     FluentThemeData theme,
     String title,
@@ -921,13 +1038,14 @@ class EditorInspector extends ConsumerWidget {
         Text(
           title,
           style: theme.typography.bodyStrong?.copyWith(
-            color: theme.inactiveColor,
-            fontSize: 12,
-            letterSpacing: 0.5,
+            color: theme.accentColor,
           ),
         ),
         const SizedBox(height: 12),
-        ...children,
+        ...children.map((child) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: child,
+        )),
       ],
     );
   }
@@ -937,18 +1055,19 @@ class EditorInspector extends ConsumerWidget {
     String value,
     Function(String) onChanged, {
     int maxLines = 1,
+    String? hint,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label),
-        const SizedBox(height: 6),
+        Text(label, style: const TextStyle(fontSize: 12)),
+        const SizedBox(height: 4),
         TextBox(
           controller: TextEditingController(text: value),
           onChanged: onChanged,
           maxLines: maxLines,
+          placeholder: hint,
         ),
-        const SizedBox(height: 12),
       ],
     );
   }
@@ -966,45 +1085,42 @@ class EditorInspector extends ConsumerWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label),
-            Text(
-              value.toStringAsFixed(1),
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
+            Text(label, style: const TextStyle(fontSize: 12)),
+            Text(value.toStringAsFixed(1), style: const TextStyle(fontSize: 12)),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Slider(
           value: value,
           min: min,
           max: max,
           onChanged: onChanged,
         ),
-        const SizedBox(height: 12),
       ],
     );
   }
 
-  Widget _buildDropdown(
+  Widget _buildDropdown<T>(
     String label,
-    String value,
-    List<String> options,
-    Function(String?) onChanged,
+    T value,
+    List<T> options,
+    Function(T) onChanged,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label),
-        const SizedBox(height: 6),
-        ComboBox<String>(
+        Text(label, style: const TextStyle(fontSize: 12)),
+        const SizedBox(height: 4),
+        ComboBox<T>(
           value: value,
-          items: options.map((option) => ComboBoxItem(
+          items: options.map((option) => ComboBoxItem<T>(
             value: option,
-            child: Text(option),
+            child: Text(option.toString()),
           )).toList(),
-          onChanged: onChanged,
+          onChanged: (newValue) {
+            if (newValue != null) onChanged(newValue);
+          },
         ),
-        const SizedBox(height: 12),
       ],
     );
   }
@@ -1012,59 +1128,149 @@ class EditorInspector extends ConsumerWidget {
   Widget _buildCheckbox(
     String label,
     bool value,
-    Function(bool?) onChanged,
+    Function(bool) onChanged,
   ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Checkbox(
-        checked: value,
-        onChanged: onChanged,
-        content: Text(label),
-      ),
-    );
-  }
-
-  Widget _buildColorPicker(
-    String label,
-    String colorValue,
-    Function(String) onChanged,
-  ) {
-    final color = _parseColor(colorValue);
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Text(label),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.grey),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextBox(
-                controller: TextEditingController(text: colorValue),
-                onChanged: onChanged,
-                placeholder: '#000000',
-              ),
-            ),
-          ],
+        Checkbox(
+          checked: value,
+          onChanged: (newValue) => onChanged(newValue ?? false),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(fontSize: 12)),
       ],
     );
   }
 
-  // Helper methods
-  void _updateBlock(WidgetRef ref, String blockId, Map<String, dynamic> properties) {
-    ref.read(templateEditorProvider.notifier).updateBlock(blockId, properties);
+  Widget _buildEnhancedColorPicker(
+    String label,
+    String colorValue,
+    Function(String) onChanged,
+    FluentThemeData theme,
+  ) {
+    final currentColor = _parseColor(colorValue);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12)),
+        const SizedBox(height: 8),
+        // Color preview and input row
+        Row(
+          children: [
+            // Color preview with live update
+            GestureDetector(
+              onTap: () => _showColorPickerDialog(colorValue, onChanged, theme),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: currentColor,
+                  border: Border.all(
+                    color: theme.accentColor.withValues(alpha: 0.5),
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: currentColor.withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Icon(
+                    FluentIcons.color,
+                    size: 16,
+                    color: _getContrastColor(currentColor),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Color input field with validation
+            Expanded(
+              child: TextBox(
+                controller: TextEditingController(text: colorValue),
+                onChanged: (value) {
+                  // Validate hex color format
+                  if (_isValidHexColor(value)) {
+                    onChanged(value);
+                  }
+                },
+                placeholder: '#000000',
+                prefix: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    '#',
+                    style: TextStyle(
+                      color: theme.inactiveColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Preset color swatches
+        _buildColorSwatches(onChanged, theme),
+      ],
+    );
+  }
+
+  Widget _buildColorSwatches(Function(String) onChanged, FluentThemeData theme) {
+    final presetColors = [
+      '#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF',
+      '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#800080',
+      '#FFC0CB', '#A52A2A', '#808080', '#000080', '#008000',
+    ];
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: presetColors.map((colorHex) {
+        final color = _parseColor(colorHex);
+        return GestureDetector(
+          onTap: () => onChanged(colorHex),
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: color,
+              border: Border.all(
+                color: theme.accentColor.withValues(alpha: 0.3),
+              ),
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  void _showColorPickerDialog(String currentColor, Function(String) onChanged, FluentThemeData theme) {
+    // This would show a more advanced color picker dialog
+    // For now, we'll keep the existing functionality
+  }
+
+  bool _isValidHexColor(String color) {
+    if (!color.startsWith('#')) return false;
+    if (color.length != 7) return false;
+    try {
+      int.parse(color.substring(1), radix: 16);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Color _getContrastColor(Color color) {
+    // Calculate luminance to determine if we should use black or white text
+    final luminance = (0.299 * color.r + 0.587 * color.g + 0.114 * color.b) / 255;
+    return luminance > 0.5 ? Colors.black : Colors.white;
   }
 
   Color _parseColor(String colorString) {
@@ -1089,22 +1295,14 @@ class EditorInspector extends ConsumerWidget {
         return FluentIcons.more;
       case TemplateBlockType.divider:
         return FluentIcons.line;
-      case TemplateBlockType.placeholder:
-        return FluentIcons.variable;
       case TemplateBlockType.list:
         return FluentIcons.bulleted_list;
-      case TemplateBlockType.table:
-        return FluentIcons.table;
-      case TemplateBlockType.social:
-        return FluentIcons.share;
       case TemplateBlockType.qrCode:
         return FluentIcons.q_r_code;
-      case TemplateBlockType.countdown:
-        return FluentIcons.timer;
-      case TemplateBlockType.rating:
-        return FluentIcons.favorite_star;
-      case TemplateBlockType.progress:
-        return FluentIcons.progress_ring_dots;
+      case TemplateBlockType.social:
+        return FluentIcons.share;
+      default:
+        return FluentIcons.unknown;
     }
   }
 
@@ -1122,22 +1320,18 @@ class EditorInspector extends ConsumerWidget {
         return 'Spacer Block';
       case TemplateBlockType.divider:
         return 'Divider Block';
-      case TemplateBlockType.placeholder:
-        return 'Placeholder Block';
       case TemplateBlockType.list:
         return 'List Block';
-      case TemplateBlockType.table:
-        return 'Table Block';
-      case TemplateBlockType.social:
-        return 'Social Block';
       case TemplateBlockType.qrCode:
         return 'QR Code Block';
-      case TemplateBlockType.countdown:
-        return 'Countdown Block';
-      case TemplateBlockType.rating:
-        return 'Rating Block';
-      case TemplateBlockType.progress:
-        return 'Progress Block';
+      case TemplateBlockType.social:
+        return 'Social Block';
+      default:
+        return 'Unknown Block';
     }
+  }
+
+  void _updateBlock(WidgetRef ref, String blockId, Map<String, dynamic> properties) {
+    ref.read(templateEditorProvider.notifier).updateBlock(blockId, properties);
   }
 }

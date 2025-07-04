@@ -7,7 +7,6 @@ import 'package:client_connect/src/features/templates/presentation/widgets/block
 import 'package:client_connect/src/features/templates/presentation/widgets/block_widgets/text_block_widget.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'block_widgets/placeholder_block_widget.dart';
 import 'block_widgets/rich_text_block_widget.dart';
 import 'block_widgets/list_block_widget.dart';
 import 'block_widgets/qr_code_block_widget.dart';
@@ -44,30 +43,78 @@ class EditorCanvas extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  FluentIcons.canvas_app_template32,
+                  editorState.isPreviewMode 
+                      ? FluentIcons.preview 
+                      : FluentIcons.canvas_app_template32,
                   size: 20,
                   color: theme.accentColor,
                 ),
               ),
               const SizedBox(width: 12),
               Text(
-                'Canvas',
+                editorState.isPreviewMode ? 'Preview' : 'Canvas',
                 style: theme.typography.subtitle,
               ),
               const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.accentColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${editorState.blocks.length} blocks',
-                  style: TextStyle(
-                    color: theme.accentColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
+              if (!editorState.isPreviewMode) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.accentColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: Text(
+                    '${editorState.blocks.length} blocks',
+                    style: TextStyle(
+                      color: theme.accentColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (editorState.usedPlaceholders.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.accentColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        FluentIcons.variable,
+                        size: 12,
+                        color: theme.accentColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${editorState.usedPlaceholders.length}',
+                        style: TextStyle(
+                          color: theme.accentColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Button(
+                onPressed: () => ref.read(templateEditorProvider.notifier).togglePreviewMode(),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      editorState.isPreviewMode ? FluentIcons.edit : FluentIcons.preview,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(editorState.isPreviewMode ? 'Edit' : 'Preview'),
+                  ],
                 ),
               ),
             ],
@@ -180,8 +227,9 @@ class EditorCanvas extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Drop zone at the top
-          _buildDropZone(context, ref, 0, dragDropState.isDragging),
+          // Drop zone at the top (only in edit mode)
+          if (!state.isPreviewMode)
+            _buildDropZone(context, ref, 0, dragDropState.isDragging),
           
           // Blocks with drop zones between them
           for (int i = 0; i < state.blocks.length; i++) ...[
@@ -191,8 +239,10 @@ class EditorCanvas extends ConsumerWidget {
               state.blocks[i],
               state.selectedBlockId == state.blocks[i].id,
               i,
+              state.isPreviewMode,
             ),
-            _buildDropZone(context, ref, i + 1, dragDropState.isDragging),
+            if (!state.isPreviewMode)
+              _buildDropZone(context, ref, i + 1, dragDropState.isDragging),
           ],
         ],
       ),
@@ -264,20 +314,21 @@ class EditorCanvas extends ConsumerWidget {
     TemplateBlock block,
     bool isSelected,
     int index,
+    bool isPreviewMode,
   ) {
     final theme = FluentTheme.of(context);
     
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: GestureDetector(
-        onTap: () {
+        onTap: !isPreviewMode ? () {
           ref.read(templateEditorProvider.notifier).selectBlock(block.id);
-        },
+        } : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
             border: Border.all(
-              color: isSelected
+              color: isSelected && !isPreviewMode
                   ? theme.accentColor
                   : Colors.transparent,
               width: 2,
@@ -289,13 +340,14 @@ class EditorCanvas extends ConsumerWidget {
               Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(6),
-                  color: isSelected
+                  color: isSelected && !isPreviewMode
                       ? theme.accentColor.withValues(alpha: 0.02)
                       : Colors.transparent,
                 ),
                 child: _buildBlockWidget(block),
               ),
-              if (isSelected) _buildBlockControls(context, ref, block),
+              if (isSelected && !isPreviewMode) 
+                _buildBlockControls(context, ref, block),
             ],
           ),
         ),
@@ -317,8 +369,6 @@ class EditorCanvas extends ConsumerWidget {
         return SpacerBlockWidget(block: block as SpacerBlock);
       case TemplateBlockType.divider:
         return DividerBlockWidget(block: block as DividerBlock);
-      case TemplateBlockType.placeholder:
-        return PlaceholderBlockWidget(block: block as PlaceholderBlock);
       case TemplateBlockType.list:
         return ListBlockWidget(block: block as ListBlock);
       case TemplateBlockType.qrCode:
@@ -404,9 +454,6 @@ class EditorCanvas extends ConsumerWidget {
         break;
       case TemplateBlockType.divider:
         block = notifier.createDividerBlock();
-        break;
-      case TemplateBlockType.placeholder:
-        block = notifier.createPlaceholderBlock();
         break;
       case TemplateBlockType.list:
         block = notifier.createListBlock();

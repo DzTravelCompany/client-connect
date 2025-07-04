@@ -122,10 +122,7 @@ class TemplateModel {
           final buttonBlock = block as ButtonBlock;
           buffer.writeln('[${buttonBlock.text}]');
           break;
-        case TemplateBlockType.placeholder:
-          final placeholderBlock = block as PlaceholderBlock;
-          buffer.writeln('{{${placeholderBlock.placeholderKey}}}');
-          break;
+
         case TemplateBlockType.list:
           final listBlock = block as ListBlock;
           for (int i = 0; i < listBlock.items.length; i++) {
@@ -193,6 +190,158 @@ class TemplateModel {
   // Check if template is compatible with a specific template type
   bool isCompatibleWith(TemplateType type) {
     return blocks.every((block) => block.isCompatibleWith(type));
+  }
+
+  /// Validate the template model for saving
+  /// Returns a list of validation errors, empty if valid
+  List<String> validate() {
+    final errors = <String>[];
+    
+    // Name validation
+    if (name.trim().isEmpty) {
+      errors.add('Template name is required');
+    } else if (name.trim().length > 255) {
+      errors.add('Template name must be 255 characters or less');
+    }
+    
+    // Subject validation for email templates
+    if (templateType == TemplateType.email) {
+      if (subject == null || subject!.trim().isEmpty) {
+        errors.add('Email templates must have a subject');
+      } else if (subject!.trim().length > 500) {
+        errors.add('Email subject must be 500 characters or less');
+      }
+    }
+    
+    // Blocks validation
+    if (blocks.isEmpty) {
+      errors.add('Template must have at least one block');
+    }
+    
+    // Validate individual blocks
+    for (int i = 0; i < blocks.length; i++) {
+      final block = blocks[i];
+      final blockErrors = _validateBlock(block, i);
+      errors.addAll(blockErrors);
+    }
+    
+    return errors;
+  }
+
+  /// Validate an individual block
+  List<String> _validateBlock(TemplateBlock block, int index) {
+    final errors = <String>[];
+    final blockLabel = 'Block ${index + 1} (${block.type.name})';
+    
+    switch (block.type) {
+      case TemplateBlockType.text:
+        final textBlock = block as TextBlock;
+        if (textBlock.text.trim().isEmpty) {
+          errors.add('$blockLabel: Text content is required');
+        }
+        break;
+        
+      case TemplateBlockType.richText:
+        final richTextBlock = block as RichTextBlock;
+        if (richTextBlock.htmlContent.trim().isEmpty) {
+          errors.add('$blockLabel: Rich text content is required');
+        }
+        break;
+        
+      case TemplateBlockType.image:
+        final imageBlock = block as ImageBlock;
+        if (imageBlock.imageUrl.trim().isEmpty) {
+          errors.add('$blockLabel: Image URL is required');
+        }
+        break;
+        
+      case TemplateBlockType.button:
+        final buttonBlock = block as ButtonBlock;
+        if (buttonBlock.text.trim().isEmpty) {
+          errors.add('$blockLabel: Button text is required');
+        }
+        break;
+        
+      case TemplateBlockType.list:
+        final listBlock = block as ListBlock;
+        if (listBlock.items.isEmpty) {
+          errors.add('$blockLabel: List must have at least one item');
+        }
+        break;
+        
+      default:
+        // Other block types don't require specific validation
+        break;
+    }
+    
+    return errors;
+  }
+
+  /// Get the estimated size of the template in bytes (for performance optimization)
+  int get estimatedSize {
+    int size = 0;
+    
+    // Base template data
+    size += name.length * 2; // UTF-16 encoding
+    size += (subject?.length ?? 0) * 2;
+    size += body.length * 2;
+    
+    // Blocks data
+    for (final block in blocks) {
+      size += _estimateBlockSize(block);
+    }
+    
+    return size;
+  }
+
+  /// Estimate the size of a single block
+  int _estimateBlockSize(TemplateBlock block) {
+    int size = 50; // Base block overhead
+    
+    switch (block.type) {
+      case TemplateBlockType.text:
+        final textBlock = block as TextBlock;
+        size += textBlock.text.length * 2;
+        break;
+        
+      case TemplateBlockType.richText:
+        final richTextBlock = block as RichTextBlock;
+        size += richTextBlock.htmlContent.length * 2;
+        break;
+        
+      case TemplateBlockType.image:
+        final imageBlock = block as ImageBlock;
+        size += imageBlock.imageUrl.length * 2;
+        size += imageBlock.altText.length * 2;
+        break;
+        
+      case TemplateBlockType.button:
+        final buttonBlock = block as ButtonBlock;
+        size += buttonBlock.text.length * 2;
+        size += buttonBlock.action.length * 2;
+        break;
+        
+      case TemplateBlockType.list:
+        final listBlock = block as ListBlock;
+        for (final item in listBlock.items) {
+          size += item.length * 2;
+        }
+        break;
+        
+      default:
+        size += 100; // Default estimate for other block types
+        break;
+    }
+    
+    return size;
+  }
+
+  /// Check if the template is considered "large" (for performance warnings)
+  bool get isLargeTemplate => estimatedSize > 1024 * 1024; // 1MB threshold
+
+  /// Get a summary of the template for logging/debugging
+  String get summary {
+    return 'TemplateModel(id: $id, name: "$name", type: $type, blocks: ${blocks.length}, size: ${(estimatedSize / 1024).toStringAsFixed(1)}KB)';
   }
 
   @override

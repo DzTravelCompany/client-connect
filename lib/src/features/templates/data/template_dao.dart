@@ -53,6 +53,16 @@ class TemplateDao {
     return updatedTemplate!;
   }
 
+  Future<bool> updateTemplatenew(TemplateModel template) async {
+    try {
+      final companion = template.toDatabaseUpdate();
+      final rowsAffected = await _database.update(_database.templates).replace(companion);
+      return rowsAffected;
+    } catch (e) {
+      throw Exception('Failed to update template: $e');
+    }
+  }
+
   // Delete template
   Future<bool> deleteTemplate(int id) async {
     final deletedRows = await (_database.delete(_database.templates)
@@ -208,7 +218,7 @@ class TemplateDao {
         'template': template,
         'block_count': template.blocks.length,
         'block_types': blockTypeCounts,
-        'has_placeholders': template.blocks.any((b) => b.type == TemplateBlockType.placeholder),
+        // 'has_placeholders': template.blocks.any((b) => b.type == TemplateBlockType.placeholder),
         'has_images': template.blocks.any((b) => b.type == TemplateBlockType.image),
         'has_buttons': template.blocks.any((b) => b.type == TemplateBlockType.button),
       };

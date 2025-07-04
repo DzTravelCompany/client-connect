@@ -207,7 +207,7 @@ class ImportResultDialog extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
+          SizedBox(
             width: 60,
             child: Text(
               'Row ${error.rowNumber}',
@@ -218,7 +218,7 @@ class ImportResultDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Container(
+          SizedBox(
             width: 80,
             child: Text(
               error.field,

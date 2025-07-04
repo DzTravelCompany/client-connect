@@ -10,7 +10,6 @@ enum TemplateBlockType {
   button,
   spacer,
   divider,
-  placeholder,
   list,
   table,
   social,
@@ -55,8 +54,6 @@ abstract class TemplateBlock {
         return SpacerBlock.fromJson(json);
       case TemplateBlockType.divider:
         return DividerBlock.fromJson(json);
-      case TemplateBlockType.placeholder:
-        return PlaceholderBlock.fromJson(json);
       case TemplateBlockType.list:
         return ListBlock.fromJson(json);
       case TemplateBlockType.table:
@@ -82,7 +79,6 @@ abstract class TemplateBlock {
       case TemplateBlockType.image:
       case TemplateBlockType.spacer:
       case TemplateBlockType.divider:
-      case TemplateBlockType.placeholder:
         return true; // Compatible with both
       case TemplateBlockType.button:
       case TemplateBlockType.list:
@@ -98,7 +94,7 @@ abstract class TemplateBlock {
   }
 }
 
-// Enhanced Text Block
+// Enhanced Text Block with placeholder support
 class TextBlock extends TemplateBlock {
   String get text => properties['text'] ?? '';
   double get fontSize => properties['fontSize'] ?? 14.0;
@@ -139,6 +135,25 @@ class TextBlock extends TemplateBlock {
             'underline': underline,
           },
         );
+
+  // Get all placeholders in the text
+  List<String> get placeholders {
+    final regex = RegExp(r'\{\{([^}]+)\}\}');
+    final matches = regex.allMatches(text);
+    return matches.map((match) => match.group(1)!.trim()).toList();
+  }
+
+  // Replace placeholders with actual values
+  String renderWithData(Map<String, String> data) {
+    String renderedText = text;
+    for (final entry in data.entries) {
+      renderedText = renderedText.replaceAll('{{${entry.key}}}', entry.value);
+    }
+    return renderedText;
+  }
+
+  // Check if text contains placeholders
+  bool get hasPlaceholders => placeholders.isNotEmpty;
 
   @override
   TextBlock copyWith({Map<String, dynamic>? properties, int? sortOrder}) {
@@ -213,6 +228,25 @@ class RichTextBlock extends TemplateBlock {
           },
         );
 
+  // Get all placeholders in the HTML content
+  List<String> get placeholders {
+    final regex = RegExp(r'\{\{([^}]+)\}\}');
+    final matches = regex.allMatches(htmlContent);
+    return matches.map((match) => match.group(1)!.trim()).toList();
+  }
+
+  // Replace placeholders with actual values
+  String renderWithData(Map<String, String> data) {
+    String renderedContent = htmlContent;
+    for (final entry in data.entries) {
+      renderedContent = renderedContent.replaceAll('{{${entry.key}}}', entry.value);
+    }
+    return renderedContent;
+  }
+
+  // Check if content contains placeholders
+  bool get hasPlaceholders => placeholders.isNotEmpty;
+
   @override
   RichTextBlock copyWith({Map<String, dynamic>? properties, int? sortOrder}) {
     final newProps = Map<String, dynamic>.from(this.properties);
@@ -245,72 +279,6 @@ class RichTextBlock extends TemplateBlock {
       fontSize: props['fontSize'] ?? 14.0,
       fontFamily: props['fontFamily'] ?? 'default',
       lineHeight: props['lineHeight'] ?? 1.4,
-      sortOrder: json['sortOrder'] ?? 0,
-    );
-  }
-}
-
-// Dynamic Content Placeholder Block
-class PlaceholderBlock extends TemplateBlock {
-  String get placeholderKey => properties['placeholderKey'] ?? '';
-  String get label => properties['label'] ?? '';
-  String get defaultValue => properties['defaultValue'] ?? '';
-  String get dataType => properties['dataType'] ?? 'text';
-  String get format => properties['format'] ?? '';
-
-  PlaceholderBlock({
-    required super.id,
-    String placeholderKey = '',
-    String label = 'Placeholder',
-    String defaultValue = '',
-    String dataType = 'text',
-    String format = '',
-    super.sortOrder = 0,
-  }) : super(
-          type: TemplateBlockType.placeholder,
-          properties: {
-            'placeholderKey': placeholderKey,
-            'label': label,
-            'defaultValue': defaultValue,
-            'dataType': dataType,
-            'format': format,
-          },
-        );
-
-  @override
-  PlaceholderBlock copyWith({Map<String, dynamic>? properties, int? sortOrder}) {
-    final newProps = Map<String, dynamic>.from(this.properties);
-    if (properties != null) {
-      newProps.addAll(properties);
-    }
-    return PlaceholderBlock(
-      id: id,
-      placeholderKey: newProps['placeholderKey'],
-      label: newProps['label'],
-      defaultValue: newProps['defaultValue'],
-      dataType: newProps['dataType'],
-      format: newProps['format'],
-      sortOrder: sortOrder ?? this.sortOrder,
-    );
-  }
-
-  @override
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type.index,
-        'sortOrder': sortOrder,
-        'properties': properties,
-      };
-
-  static PlaceholderBlock fromJson(Map<String, dynamic> json) {
-    final props = json['properties'] as Map<String, dynamic>;
-    return PlaceholderBlock(
-      id: json['id'],
-      placeholderKey: props['placeholderKey'] ?? '',
-      label: props['label'] ?? '',
-      defaultValue: props['defaultValue'] ?? '',
-      dataType: props['dataType'] ?? 'text',
-      format: props['format'] ?? '',
       sortOrder: json['sortOrder'] ?? 0,
     );
   }
@@ -870,4 +838,64 @@ class ProgressBlock extends TemplateBlock {
   Map<String, dynamic> toJson() => {'id': id, 'type': type.index, 'sortOrder': sortOrder, 'properties': properties};
   
   static ProgressBlock fromJson(Map<String, dynamic> json) => ProgressBlock(id: json['id'], sortOrder: json['sortOrder'] ?? 0);
+}
+
+// Placeholder management utilities
+class PlaceholderManager {
+  static const Map<String, String> defaultPlaceholders = {
+    'first_name': 'First Name',
+    'last_name': 'Last Name',
+    'full_name': 'Full Name',
+    'email': 'Email Address',
+    'phone': 'Phone Number',
+    'company': 'Company Name',
+    'job_title': 'Job Title',
+    'address': 'Address',
+    'date': 'Current Date',
+    'time': 'Current Time',
+  };
+
+  static const Map<String, String> sampleData = {
+    'first_name': 'John',
+    'last_name': 'Doe',
+    'full_name': 'John Doe',
+    'email': 'john.doe@example.com',
+    'phone': '+1 (555) 123-4567',
+    'company': 'Acme Corporation',
+    'job_title': 'Software Engineer',
+    'address': '123 Main St, Anytown, USA',
+    'date': '2024-01-15',
+    'time': '10:30 AM',
+  };
+
+  static List<String> getAvailablePlaceholders() {
+    return defaultPlaceholders.keys.toList();
+  }
+
+  static String getPlaceholderLabel(String key) {
+    return defaultPlaceholders[key] ?? key;
+  }
+
+  static String getSampleValue(String key) {
+    return sampleData[key] ?? '[${key.toUpperCase()}]';
+  }
+
+  static Map<String, String> getAllSampleData() {
+    return Map.from(sampleData);
+  }
+
+  // Extract all placeholders from a list of blocks
+  static Set<String> extractPlaceholdersFromBlocks(List<TemplateBlock> blocks) {
+    final placeholders = <String>{};
+    
+    for (final block in blocks) {
+      if (block is TextBlock && block.hasPlaceholders) {
+        placeholders.addAll(block.placeholders);
+      } else if (block is RichTextBlock && block.hasPlaceholders) {
+        placeholders.addAll(block.placeholders);
+      }
+    }
+    
+    return placeholders;
+  }
 }

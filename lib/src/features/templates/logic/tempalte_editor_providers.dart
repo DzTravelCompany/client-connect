@@ -2,7 +2,6 @@ import 'package:client_connect/src/features/templates/data/template_block_model.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
-
 class TemplateEditorState {
   final List<TemplateBlock> blocks;
   final String? selectedBlockId;
@@ -14,6 +13,9 @@ class TemplateEditorState {
   final String templateSubject;
   final bool isLoading;
   final String? error;
+  final DateTime? createdAt;
+  final bool isPreviewMode;
+  final Map<String, String> previewData;
 
   const TemplateEditorState({
     this.blocks = const [],
@@ -26,6 +28,9 @@ class TemplateEditorState {
     this.templateSubject = '',
     this.isLoading = false,
     this.error,
+    this.createdAt,
+    this.isPreviewMode = false,
+    this.previewData = const {},
   });
 
   TemplateEditorState copyWith({
@@ -39,6 +44,9 @@ class TemplateEditorState {
     String? templateSubject,
     bool? isLoading,
     String? error,
+    DateTime? createdAt,
+    bool? isPreviewMode,
+    Map<String, String>? previewData,
   }) {
     return TemplateEditorState(
       blocks: blocks ?? this.blocks,
@@ -51,6 +59,9 @@ class TemplateEditorState {
       templateSubject: templateSubject ?? this.templateSubject,
       isLoading: isLoading ?? this.isLoading,
       error: error ?? this.error,
+      createdAt: createdAt ?? this.createdAt,
+      isPreviewMode: isPreviewMode ?? this.isPreviewMode,
+      previewData: previewData ?? this.previewData,
     );
   }
 
@@ -72,6 +83,11 @@ class TemplateEditorState {
         .toList();
   }
 
+  // Get all placeholders used in the template
+  Set<String> get usedPlaceholders {
+    return PlaceholderManager.extractPlaceholdersFromBlocks(blocks);
+  }
+
   TemplateBlock _createDummyBlock(TemplateBlockType type) {
     const uuid = Uuid();
     switch (type) {
@@ -87,8 +103,6 @@ class TemplateEditorState {
         return SpacerBlock(id: uuid.v4());
       case TemplateBlockType.divider:
         return DividerBlock(id: uuid.v4());
-      case TemplateBlockType.placeholder:
-        return PlaceholderBlock(id: uuid.v4());
       case TemplateBlockType.list:
         return ListBlock(id: uuid.v4());
       case TemplateBlockType.table:
@@ -112,6 +126,8 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
 
   TemplateEditorNotifier() : super(const TemplateEditorState()) {
     _addToHistory([]);
+    // Initialize with sample data
+    state = state.copyWith(previewData: PlaceholderManager.getAllSampleData());
   }
 
   void _addToHistory(List<TemplateBlock> blocks) {
@@ -249,6 +265,36 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
     addBlock(duplicatedBlock, index: blockIndex + 1);
   }
 
+  // Insert placeholder into selected text block
+  void insertPlaceholder(String placeholderKey) {
+    if (state.selectedBlockId == null) return;
+    
+    final selectedBlock = state.selectedBlock;
+    if (selectedBlock is TextBlock) {
+      final currentText = selectedBlock.text;
+      final placeholder = '{{$placeholderKey}}';
+      final newText = currentText.isEmpty ? placeholder : '$currentText $placeholder';
+      
+      updateBlock(selectedBlock.id, {'text': newText});
+    } else if (selectedBlock is RichTextBlock) {
+      final currentContent = selectedBlock.htmlContent;
+      final placeholder = '{{$placeholderKey}}';
+      final newContent = currentContent.isEmpty ? placeholder : '$currentContent $placeholder';
+      
+      updateBlock(selectedBlock.id, {'htmlContent': newContent});
+    }
+  }
+
+  // Toggle preview mode
+  void togglePreviewMode() {
+    state = state.copyWith(isPreviewMode: !state.isPreviewMode);
+  }
+
+  // Update preview data
+  void updatePreviewData(Map<String, String> data) {
+    state = state.copyWith(previewData: data);
+  }
+
   TemplateBlock _duplicateBlock(TemplateBlock original) {
     final newId = _uuid.v4();
     switch (original.type) {
@@ -376,7 +422,6 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
   TemplateBlock createButtonBlock() => ButtonBlock(id: _uuid.v4());
   TemplateBlock createSpacerBlock() => SpacerBlock(id: _uuid.v4());
   TemplateBlock createDividerBlock() => DividerBlock(id: _uuid.v4());
-  TemplateBlock createPlaceholderBlock() => PlaceholderBlock(id: _uuid.v4());
   TemplateBlock createListBlock() => ListBlock(id: _uuid.v4());
   TemplateBlock createQRCodeBlock() => QRCodeBlock(id: _uuid.v4());
   TemplateBlock createSocialBlock() => SocialBlock(id: _uuid.v4());

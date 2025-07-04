@@ -6,7 +6,11 @@ import '../../clients/logic/client_providers.dart';
 import '../../templates/logic/template_providers.dart';
 import '../../clients/data/client_model.dart';
 import '../../templates/data/template_model.dart';
+import '../../tags/logic/tag_providers.dart';
+import '../../tags/data/tag_model.dart';
+import '../../tags/presentation/widgets/tag_chip.dart';
 import '../logic/campaign_providers.dart';
+import '../presentation/widgets/template_preview_widget.dart';
 
 class CampaignCreationScreen extends ConsumerStatefulWidget {
   const CampaignCreationScreen({super.key});
@@ -18,15 +22,24 @@ class CampaignCreationScreen extends ConsumerStatefulWidget {
 class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen> {
   int _currentStep = 0;
   final _campaignNameController = TextEditingController();
+  final _searchController = TextEditingController();
   
-  List<ClientModel> _selectedClients = [];
+  final List<ClientModel> _selectedClients = [];
+  List<ClientModel> _filteredClients = [];
   TemplateModel? _selectedTemplate;
   DateTime? _scheduledDate;
   TimeOfDay? _scheduledTime;
+  
+  // Filtering and search state
+  String _searchTerm = '';
+  final List<TagModel> _selectedTags = [];
+  String _sortBy = 'name'; // name, company, recent
+  bool _sortAscending = true;
 
   @override
   void dispose() {
     _campaignNameController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -120,7 +133,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.grey[10],
+                color: Colors.grey,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -160,7 +173,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                 ? Colors.green 
                 : isActive 
                     ? FluentTheme.of(context).accentColor 
-                    : Colors.grey[60],
+                    : Colors.grey[100],
             shape: BoxShape.circle,
           ),
           child: Center(
@@ -190,59 +203,213 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   Widget _buildStepContent() {
     switch (_currentStep) {
       case 0:
-        return _buildAudienceSelection();
+        return _buildEnhancedAudienceSelection();
       case 1:
         return _buildTemplateSelection();
       case 2:
-        return _buildReviewAndSchedule();
+        return _buildEnhancedReviewAndSchedule();
       default:
         return const SizedBox.shrink();
     }
   }
 
-  Widget _buildAudienceSelection() {
+  Widget _buildEnhancedAudienceSelection() {
     final clientsAsync = ref.watch(allClientsProvider);
+    final tagsAsync = ref.watch(allTagsProvider);
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Select Audience',
-          style: FluentTheme.of(context).typography.title,
+        // Header
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Select Audience',
+                    style: FluentTheme.of(context).typography.title,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Choose which clients will receive this campaign',
+                    style: FluentTheme.of(context).typography.body,
+                  ),
+                ],
+              ),
+            ),
+            // Selection summary
+            if (_selectedClients.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(FluentIcons.people, size: 16, color: Colors.blue),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${_selectedClients.length} selected',
+                      style: TextStyle(
+                        color: Colors.blue,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Choose which clients will receive this campaign',
-          style: FluentTheme.of(context).typography.body,
-        ),
+        
         const SizedBox(height: 16),
         
-        if (_selectedClients.isNotEmpty)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              children: [
-                const Icon(FluentIcons.people, size: 16),
-                const SizedBox(width: 8),
-                Text(
-                  '${_selectedClients.length} clients selected',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                Button(
-                  onPressed: () => setState(() => _selectedClients.clear()),
-                  child: const Text('Clear All'),
-                ),
-              ],
-            ),
+        // Search and filter controls
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey[200]),
           ),
+          child: Column(
+            children: [
+              // Search bar
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextBox(
+                      controller: _searchController,
+                      placeholder: 'Search clients by name, email, company...',
+                      prefix: const Icon(FluentIcons.search),
+                      suffix: _searchTerm.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(FluentIcons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchTerm = '');
+                              },
+                            )
+                          : null,
+                      onChanged: (value) {
+                        setState(() => _searchTerm = value);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Sort dropdown
+                  Expanded(
+                    child: ComboBox<String>(
+                      placeholder: const Text('Sort by'),
+                      value: _sortBy,
+                      items: const [
+                        ComboBoxItem(value: 'name', child: Text('Name')),
+                        ComboBoxItem(value: 'company', child: Text('Company')),
+                        ComboBoxItem(value: 'recent', child: Text('Recently Added')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _sortBy = value);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: Icon(
+                      _sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down,
+                    ),
+                    onPressed: () {
+                      setState(() => _sortAscending = !_sortAscending);
+                    },
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 12),
+              
+              // Tag filters
+              tagsAsync.when(
+                data: (tags) {
+                  if (tags.isEmpty) return const SizedBox.shrink();
+                  
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Filter by tags:', style: TextStyle(fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: tags.map((tag) {
+                          final isSelected = _selectedTags.any((t) => t.id == tag.id);
+                          return TagChip(
+                            tag: tag,
+                            size: TagChipSize.small,
+                            isSelected: isSelected,
+                            onTap: () {
+                              setState(() {
+                                if (isSelected) {
+                                  _selectedTags.removeWhere((t) => t.id == tag.id);
+                                } else {
+                                  _selectedTags.add(tag);
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      if (_selectedTags.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Button(
+                          onPressed: () => setState(() => _selectedTags.clear()),
+                          child: const Text('Clear filters'),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+              ),
+            ],
+          ),
+        ),
         
         const SizedBox(height: 16),
         
+        // Bulk selection controls
+        Row(
+          children: [
+            Button(
+              onPressed: () => _selectFilteredClients(),
+              child: const Text('Select All Filtered'),
+            ),
+            const SizedBox(width: 12),
+            Button(
+              onPressed: () => setState(() => _selectedClients.clear()),
+              child: const Text('Clear Selection'),
+            ),
+            const Spacer(),
+            if (_selectedClients.isNotEmpty)
+              Text(
+                '${_selectedClients.length} of ${_getFilteredClientsCount()} clients selected',
+                style: TextStyle(
+                  color: Colors.grey[120],
+                  fontSize: 12,
+                ),
+              ),
+          ],
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // Client list
         Expanded(
           child: clientsAsync.when(
             data: (clients) {
@@ -252,105 +419,16 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                 );
               }
               
-              return Column(
-                children: [
-                  // Select all/none buttons
-                  Row(
-                    children: [
-                      Button(
-                        onPressed: () => setState(() => _selectedClients = List.from(clients)),
-                        child: const Text('Select All'),
-                      ),
-                      const SizedBox(width: 16),
-                      Button(
-                        onPressed: () => setState(() => _selectedClients.clear()),
-                        child: const Text('Select None'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  
-                  // Client list
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: clients.length,
-                      itemBuilder: (context, index) {
-                        final client = clients[index];
-                        final isSelected = _selectedClients.any((c) => c.id == client.id);
-
-                        return GestureDetector(
-                          onTap: () {
-                            // also toggle when tapping anywhere on the row
-                            setState(() {
-                              if (isSelected) {
-                                _selectedClients.removeWhere((c) => c.id == client.id);
-                              } else {
-                                _selectedClients.add(client);
-                              }
-                            });
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Checkbox(
-                                  checked: isSelected,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      if (value == true){
-                                        _selectedClients.add(client);
-                                      }
-                                      else {
-                                        _selectedClients.removeWhere((c) => c.id == client.id);
-                                      }
-                                    });
-                                  },
-                                ),
-
-                                const SizedBox(width: 12),
-
-                                // Labels
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(client.fullName),
-
-                                      const SizedBox(height: 4),
-
-                                      if (client.email != null)
-                                        Row(
-                                          children: [
-                                            const Icon(FluentIcons.mail, size: 12),
-                                            const SizedBox(width: 4),
-                                            Text(client.email!, style: const TextStyle(fontSize: 12)),
-                                          ],
-                                        ),
-
-                                      if (client.phone != null)
-                                        Row(
-                                          children: [
-                                            const Icon(FluentIcons.phone, size: 12),
-                                            const SizedBox(width: 4),
-                                            Text(client.phone!, style: const TextStyle(fontSize: 12)),
-                                          ],
-                                        ),
-
-                                      if (client.company != null)
-                                        Text(client.company!, style: const TextStyle(fontSize: 12)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              );
+              final filteredClients = _filterAndSortClients(clients);
+              _filteredClients = filteredClients;
+              
+              if (filteredClients.isEmpty) {
+                return const Center(
+                  child: Text('No clients match your search criteria.'),
+                );
+              }
+              
+              return _buildClientList(filteredClients);
             },
             loading: () => const Center(child: ProgressRing()),
             error: (error, stack) => Center(
@@ -359,6 +437,110 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildClientList(List<ClientModel> clients) {
+    return ListView.builder(
+      itemCount: clients.length,
+      itemBuilder: (context, index) {
+        final client = clients[index];
+        final isSelected = _selectedClients.any((c) => c.id == client.id);
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.blue.withValues(alpha: 0.1) : null,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected 
+                  ? Colors.blue.withValues(alpha: 0.3)
+                  : Colors.grey[200],
+            ),
+          ),
+          child: ListTile(
+            leading: Checkbox(
+              checked: isSelected,
+              onChanged: (value) => _toggleClientSelection(client),
+            ),
+            title: Text(
+              client.fullName,
+              style: TextStyle(
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (client.company != null) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(FluentIcons.build, size: 12),
+                      const SizedBox(width: 4),
+                      Text(client.company!, style: const TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ],
+                if (client.email != null) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(FluentIcons.mail, size: 12),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          client.email!, 
+                          style: const TextStyle(fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (client.phone != null) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(FluentIcons.phone, size: 12),
+                      const SizedBox(width: 4),
+                      Text(client.phone!, style: const TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ],
+                // Show client tags if any
+                // if (client.tag.isNotEmpty) ...[
+                //   const SizedBox(height: 4),
+                //   _buildClientTags(client.tagIds),
+                // ],
+              ],
+            ),
+            onPressed: () => _toggleClientSelection(client),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildClientTags(List<int> tagIds) {
+    final tagsAsync = ref.watch(allTagsProvider);
+    
+    return tagsAsync.when(
+      data: (allTags) {
+        final clientTags = allTags.where((tag) => tagIds.contains(tag.id)).toList();
+        if (clientTags.isEmpty) return const SizedBox.shrink();
+        
+        return Wrap(
+          spacing: 4,
+          runSpacing: 2,
+          children: clientTags.take(3).map((tag) => TagChip(
+            tag: tag,
+            size: TagChipSize.small,
+          )).toList(),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 
@@ -431,7 +613,6 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // 1) The dot itself
                             RadioButton(
                               checked: isSelected,
                               onChanged: (checked) {
@@ -443,7 +624,6 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
 
                             const SizedBox(width: 12),
 
-                            // 2) Your icon + title + body
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -495,183 +675,452 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
     );
   }
 
-  Widget _buildReviewAndSchedule() {
+  Widget _buildEnhancedReviewAndSchedule() {
     return ScrollConfiguration(
       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Review & Schedule',
-              style: FluentTheme.of(context).typography.title,
+            // Header
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Review & Schedule',
+                        style: FluentTheme.of(context).typography.title,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Review your campaign details and choose when to send',
+                        style: FluentTheme.of(context).typography.body,
+                      ),
+                    ],
+                  ),
+                ),
+                // Campaign status indicator
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(FluentIcons.clock, size: 14, color: Colors.orange),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Draft',
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Review your campaign details and choose when to send',
-              style: FluentTheme.of(context).typography.body,
-            ),
+            
             const SizedBox(height: 24),
             
             // Campaign Name
-            Text(
-              'Campaign Name *',
-              style: FluentTheme.of(context).typography.body,
-            ),
-            const SizedBox(height: 8),
-            TextFormBox(
-              controller: _campaignNameController,
-              placeholder: 'Enter campaign name...',
-            ),
-            
-            const SizedBox(height: 24),
-            
-            // Campaign Summary
             Container(
-              width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.grey,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[40]),
+                border: Border.all(color: Colors.grey[200]),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Campaign Summary',
-                    style: FluentTheme.of(context).typography.subtitle,
+                  Row(
+                    children: [
+                      const Icon(FluentIcons.edit, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Campaign Name',
+                        style: FluentTheme.of(context).typography.subtitle,
+                      ),
+                      Text(' *', style: TextStyle(color: Colors.red)),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  _buildSummaryRow('Recipients', '${_selectedClients.length} clients'),
-                  _buildSummaryRow('Template', _selectedTemplate?.name ?? ''),
-                  _buildSummaryRow('Type', _selectedTemplate?.type.toUpperCase() ?? ''),
-                  if (_selectedTemplate?.subject != null)
-                    _buildSummaryRow('Subject', _selectedTemplate!.subject!),
-                  
-                  const SizedBox(height: 12),
-                  const Divider(),
-                  const SizedBox(height: 12),
-                  
-                  // Preview with first client
-                  if (_selectedClients.isNotEmpty && _selectedTemplate != null) ...[
-                    Text(
-                      'Message Preview (${_selectedClients.first.fullName}):',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey[60]),
-                      ),
-                      child: Text(
-                        TemplatePreviewService.generatePreview(
-                          _selectedTemplate!,
-                          _selectedClients.first,
-                        ),
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
+                  const SizedBox(height: 8),
+                  TextFormBox(
+                    controller: _campaignNameController,
+                    placeholder: 'Enter a descriptive campaign name...',
+                  ),
                 ],
               ),
             ),
             
             const SizedBox(height: 24),
             
-            // Scheduling Options
-            Text(
-              'Schedule Options',
-              style: FluentTheme.of(context).typography.subtitle,
-            ),
-            const SizedBox(height: 12),
-            
+            // Campaign Overview Cards
             Row(
               children: [
+                // Audience Summary
                 Expanded(
-                  child: Button(
-                    onPressed: () {
-                      setState(() {
-                        _scheduledDate = null;
-                        _scheduledTime = null;
-                      });
-                    },
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(FluentIcons.send, size: 16),
-                        const SizedBox(width: 8),
-                        const Text('Send Now'),
-                      ],
-                    ),
+                  child: _buildSummaryCard(
+                    icon: FluentIcons.people,
+                    title: 'Audience',
+                    value: '${_selectedClients.length}',
+                    subtitle: _selectedClients.length == 1 ? 'recipient' : 'recipients',
+                    color: Colors.blue,
                   ),
                 ),
                 const SizedBox(width: 16),
+                // Template Summary
                 Expanded(
-                  child: Button(
-                    onPressed: _showSchedulePicker,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(FluentIcons.calendar, size: 16),
-                        const SizedBox(width: 8),
-                        Text(
-                          _scheduledDate != null 
-                              ? 'Scheduled'
-                              : 'Schedule Later',
-                        ),
-                      ],
-                    ),
+                  child: _buildSummaryCard(
+                    icon: _selectedTemplate?.isEmail == true ? FluentIcons.mail : FluentIcons.chat,
+                    title: 'Template',
+                    value: _selectedTemplate?.name ?? 'None',
+                    subtitle: _selectedTemplate?.type.toUpperCase() ?? '',
+                    color: Colors.green,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Schedule Summary
+                Expanded(
+                  child: _buildSummaryCard(
+                    icon: FluentIcons.calendar,
+                    title: 'Schedule',
+                    value: _scheduledDate != null ? 'Scheduled' : 'Send Now',
+                    subtitle: _scheduledDate != null ? _formatScheduledTime() : 'Immediate',
+                    color: Colors.orange,
                   ),
                 ),
               ],
             ),
             
-            if (_scheduledDate != null && _scheduledTime != null)
+            const SizedBox(height: 24),
+            
+            // Template Preview Section
+            if (_selectedTemplate != null && _selectedClients.isNotEmpty) ...[
               Container(
-                margin: const EdgeInsets.only(top: 12),
-                padding: const EdgeInsets.all(12),
+                width: double.infinity,
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.grey,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[200]),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(FluentIcons.clock, size: 16),
-                    const SizedBox(width: 8),
-                    Text('Scheduled for: ${_formatScheduledTime()}'),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          const Icon(FluentIcons.preview, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Message Preview',
+                            style: FluentTheme.of(context).typography.subtitle,
+                          ),
+                          const Spacer(),
+                          ComboBox<ClientModel>(
+                            placeholder: const Text('Preview for client'),
+                            value: _selectedClients.first,
+                            items: _selectedClients.take(5).map((client) => 
+                              ComboBoxItem(
+                                value: client,
+                                child: Text(client.fullName),
+                              ),
+                            ).toList(),
+                            onChanged: (client) {
+                              // Update preview for selected client
+                              setState(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: TemplatePreviewWidget(
+                        template: _selectedTemplate!,
+                        client: _selectedClients.first,
+                      ),
+                    ),
                   ],
                 ),
               ),
+              
+              const SizedBox(height: 24),
+            ],
+            
+            // Scheduling Options
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[200]),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(FluentIcons.clock, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Schedule Options',
+                        style: FluentTheme.of(context).typography.subtitle,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: _scheduledDate == null ? Colors.blue.withValues(alpha: 0.1) : null,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: _scheduledDate == null 
+                                  ? Colors.blue.withValues(alpha: 0.3)
+                                  : Colors.grey[60],
+                            ),
+                          ),
+                          child: Button(
+                            onPressed: () {
+                              setState(() {
+                                _scheduledDate = null;
+                                _scheduledTime = null;
+                              });
+                            },
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(FluentIcons.send, size: 16),
+                                const SizedBox(width: 8),
+                                const Text('Send Now'),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: _scheduledDate != null ? Colors.orange.withValues(alpha: 0.1) : null,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: _scheduledDate != null 
+                                  ? Colors.orange.withValues(alpha: 0.3)
+                                  : Colors.grey[60],
+                            ),
+                          ),
+                          child: Button(
+                            onPressed: _showSchedulePicker,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(FluentIcons.calendar, size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _scheduledDate != null 
+                                      ? 'Scheduled'
+                                      : 'Schedule Later',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  if (_scheduledDate != null && _scheduledTime != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(FluentIcons.calendar_day, size: 16, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Scheduled for:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  _formatScheduledTime(),
+                                  style: TextStyle(
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(FluentIcons.clear, size: 14),
+                            onPressed: () {
+                              setState(() {
+                                _scheduledDate = null;
+                                _scheduledTime = null;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSummaryRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+  Widget _buildSummaryCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required String subtitle,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: Text(value),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey[120],
+            ),
           ),
         ],
       ),
     );
+  }
+
+  // Helper methods
+  List<ClientModel> _filterAndSortClients(List<ClientModel> clients) {
+    var filtered = clients.where((client) {
+      // Text search
+      if (_searchTerm.isNotEmpty) {
+        final searchLower = _searchTerm.toLowerCase();
+        final matchesName = client.fullName.toLowerCase().contains(searchLower);
+        final matchesEmail = client.email?.toLowerCase().contains(searchLower) ?? false;
+        final matchesCompany = client.company?.toLowerCase().contains(searchLower) ?? false;
+        
+        if (!matchesName && !matchesEmail && !matchesCompany) {
+          return false;
+        }
+      }
+      
+      // Tag filter
+      // if (_selectedTags.isNotEmpty) {
+      //   final hasMatchingTag = _selectedTags.any((tag) => client.tagIds.contains(tag.id));
+      //   if (!hasMatchingTag) return false;
+      // }
+      
+      return true;
+    }).toList();
+    
+    // Sort
+    filtered.sort((a, b) {
+      int comparison;
+      switch (_sortBy) {
+        case 'company':
+          comparison = (a.company ?? '').compareTo(b.company ?? '');
+          break;
+        case 'recent':
+          comparison = b.id.compareTo(a.id); // Assuming higher ID = more recent
+          break;
+        default: // name
+          comparison = a.fullName.compareTo(b.fullName);
+          break;
+      }
+      
+      return _sortAscending ? comparison : -comparison;
+    });
+    
+    return filtered;
+  }
+
+  void _toggleClientSelection(ClientModel client) {
+    setState(() {
+      final isSelected = _selectedClients.any((c) => c.id == client.id);
+      if (isSelected) {
+        _selectedClients.removeWhere((c) => c.id == client.id);
+      } else {
+        _selectedClients.add(client);
+      }
+    });
+  }
+
+  void _selectFilteredClients() {
+    setState(() {
+      for (final client in _filteredClients) {
+        if (!_selectedClients.any((c) => c.id == client.id)) {
+          _selectedClients.add(client);
+        }
+      }
+    });
+  }
+
+  int _getFilteredClientsCount() {
+    return _filteredClients.length;
   }
 
   bool _canProceedToNext() {

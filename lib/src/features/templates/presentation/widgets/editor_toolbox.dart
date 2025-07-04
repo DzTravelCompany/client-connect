@@ -4,7 +4,6 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show Material;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-
 class EditorToolbox extends ConsumerWidget {
   const EditorToolbox({super.key});
 
@@ -83,6 +82,8 @@ class EditorToolbox extends ConsumerWidget {
                   _getWhatsAppBlocks(),
                 ),
               ],
+              const SizedBox(height: 24),
+              _buildPlaceholderSection(context, ref, editorState),
             ],
           ),
         ),
@@ -95,7 +96,7 @@ class EditorToolbox extends ConsumerWidget {
       _ToolboxItem(
         icon: FluentIcons.text_field,
         title: 'Text',
-        description: 'Simple text content',
+        description: 'Simple text content with placeholders',
         blockType: TemplateBlockType.text,
         isCompatible: true,
       ),
@@ -111,13 +112,6 @@ class EditorToolbox extends ConsumerWidget {
         title: 'Image',
         description: 'Add images and graphics',
         blockType: TemplateBlockType.image,
-        isCompatible: true,
-      ),
-      _ToolboxItem(
-        icon: FluentIcons.variable,
-        title: 'Placeholder',
-        description: 'Dynamic content placeholder',
-        blockType: TemplateBlockType.placeholder,
         isCompatible: true,
       ),
     ];
@@ -178,6 +172,183 @@ class EditorToolbox extends ConsumerWidget {
         isCompatible: true,
       ),
     ];
+  }
+
+  Widget _buildPlaceholderSection(BuildContext context, WidgetRef ref, TemplateEditorState state) {
+    final theme = FluentTheme.of(context);
+    final availablePlaceholders = PlaceholderManager.getAvailablePlaceholders();
+    final usedPlaceholders = state.usedPlaceholders;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'PLACEHOLDERS',
+          style: theme.typography.bodyStrong?.copyWith(
+            color: theme.inactiveColor,
+            fontSize: 12,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.accentColor.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: theme.accentColor.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    FluentIcons.variable,
+                    size: 16,
+                    color: theme.accentColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Click to insert into selected text block',
+                    style: theme.typography.caption?.copyWith(
+                      color: theme.inactiveColor,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: availablePlaceholders.map((placeholder) {
+                  final isUsed = usedPlaceholders.contains(placeholder);
+                  final canInsert = state.selectedBlock is TextBlock || state.selectedBlock is RichTextBlock;
+                  
+                  return _buildPlaceholderChip(
+                    context,
+                    ref,
+                    placeholder,
+                    PlaceholderManager.getPlaceholderLabel(placeholder),
+                    isUsed,
+                    canInsert,
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+        if (usedPlaceholders.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text(
+            'USED IN TEMPLATE',
+            style: theme.typography.bodyStrong?.copyWith(
+              color: theme.inactiveColor,
+              fontSize: 12,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: usedPlaceholders.map((placeholder) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.accentColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '{{$placeholder}}',
+                  style: TextStyle(
+                    color: theme.accentColor,
+                    fontSize: 10,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPlaceholderChip(
+    BuildContext context,
+    WidgetRef ref,
+    String key,
+    String label,
+    bool isUsed,
+    bool canInsert,
+  ) {
+    final theme = FluentTheme.of(context);
+    
+    return HoverButton(
+      onPressed: canInsert ? () => ref.read(templateEditorProvider.notifier).insertPlaceholder(key) : null,
+      builder: (context, states) {
+        final isHovering = states.contains(WidgetState.hovered);
+        final isDisabled = !canInsert;
+        
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isDisabled
+                ? theme.accentColor.withValues(alpha: 0.05)
+                : isHovering
+                    ? theme.accentColor.withValues(alpha: 0.15)
+                    : theme.accentColor.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDisabled
+                  ? theme.accentColor.withValues(alpha: 0.1)
+                  : isHovering
+                      ? theme.accentColor.withValues(alpha: 0.4)
+                      : theme.accentColor.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                FluentIcons.variable,
+                size: 12,
+                color: isDisabled
+                    ? theme.inactiveColor
+                    : theme.accentColor,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isDisabled
+                      ? theme.inactiveColor
+                      : theme.accentColor,
+                  fontSize: 11,
+                  fontWeight: isUsed ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+              if (isUsed) ...[
+                const SizedBox(width: 4),
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: theme.accentColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildToolboxSection(
@@ -374,9 +545,6 @@ class EditorToolbox extends ConsumerWidget {
         break;
       case TemplateBlockType.divider:
         notifier.addBlock(notifier.createDividerBlock());
-        break;
-      case TemplateBlockType.placeholder:
-        notifier.addBlock(notifier.createPlaceholderBlock());
         break;
       case TemplateBlockType.list:
         notifier.addBlock(notifier.createListBlock());
