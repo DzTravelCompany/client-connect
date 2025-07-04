@@ -1,5 +1,6 @@
 import 'dart:isolate';
 import 'dart:async';
+import 'package:client_connect/constants.dart';
 import 'package:client_connect/src/core/services/isolate_sending_service.dart';
 import 'package:client_connect/src/features/campaigns/data/campaign_dao.dart';
 import 'package:flutter/foundation.dart';
@@ -22,9 +23,10 @@ class SendingEngine {
 
     try {
       // Update campaign status to in_progress
+      logger.i('Starting campaign $campaignId');
       final campaignDao = CampaignDao();
       await campaignDao.updateCampaignStatus(campaignId, 'in_progress');
-
+      logger.i('Campaign $campaignId started successfully');
       // Create isolate controller
       final controller = SendingIsolateController(campaignId);
       _activeIsolates[campaignId] = controller;
