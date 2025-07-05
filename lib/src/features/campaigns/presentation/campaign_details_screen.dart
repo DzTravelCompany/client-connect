@@ -406,9 +406,9 @@ class CampaignDetailsScreen extends ConsumerWidget {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.grey[10],
+                        color: Colors.grey[150],
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey[40]),
+                        border: Border.all(color: Colors.grey[200]),
                       ),
                       child: Text(
                         template.body,

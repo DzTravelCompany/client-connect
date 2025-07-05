@@ -18,10 +18,23 @@ class IsolateSendingService {
   final _dio = Dio();
 
   Future<void> initialize() async {
-    // Initialize database connection in isolate
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'client_connect.db'));
-    _db = AppDatabase(NativeDatabase(file));
+    try {
+
+
+      // Initialize database connection in isolate
+      final dbFolder = await getApplicationDocumentsDirectory();
+      final file = File(p.join(dbFolder.path, 'client_connect.db'));
+      _db = AppDatabase(NativeDatabase(file));
+      
+      // Test database connection
+      _db.select(_db.campaigns).limit(1);
+      
+      logger.i('Isolate database connection established successfully');
+    } catch (e, stackTrace) {
+      logger.e('Failed to initialize isolate sending service: $e', 
+             error: e, stackTrace: stackTrace);
+      rethrow;
+    }
   }
 
   Future<void> processCampaign(
@@ -119,7 +132,17 @@ class IsolateSendingService {
       ));
 
     } catch (e) {
-      logger.e('Campaign processing error: $e');
+      logger.e('Campaign processing error: $e', error: e);
+      
+      // Send error progress update
+      onProgress(CampaignProgress(
+        campaignId: campaignId,
+        processed: 0,
+        total: 0,
+        successful: 0,
+        failed: 0,
+        currentStatus: 'Error: $e',
+      ));
       rethrow;
     }
   }

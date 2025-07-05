@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show TimeOfDay, showDatePicker, showTimePicker;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../clients/logic/client_providers.dart';
 import '../../templates/logic/template_providers.dart';
 import '../../clients/data/client_model.dart';
@@ -40,15 +41,40 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   // Selection states
   final bool _selectAllMode = false;
 
+  // Track if we're in the process of disposing to prevent ref usage
+  bool _isDisposing = false;
+
   @override
   void dispose() {
+    _isDisposing = true;
+    
+    // Dispose controllers first
     _campaignNameController.dispose();
     _searchController.dispose();
+    
+    // Only reset the campaign creation state if the widget is still mounted
+    // and we haven't started the disposing process
+    try {
+      if (mounted && !_isDisposing) {
+        ref.read(campaignCreationProvider.notifier).resetState();
+      }
+    } catch (e) {
+      // Silently catch any ref-related errors during disposal
+      // This prevents the "Cannot use ref after widget was disposed" error
+    }
+    
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Early return if disposing to prevent any ref usage
+    if (_isDisposing) {
+      return const ScaffoldPage(
+        content: Center(child: ProgressRing()),
+      );
+    }
+
     final creationState = ref.watch(campaignCreationProvider);
     
     return ScaffoldPage(
@@ -60,14 +86,22 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
               CommandBarButton(
                 icon: const Icon(FluentIcons.back),
                 label: const Text('Back'),
-                onPressed: creationState.isLoading ? null : () => setState(() => _currentStep--),
+                onPressed: creationState.isLoading ? null : () {
+                  if (mounted && !_isDisposing) {
+                    setState(() => _currentStep--);
+                  }
+                },
               ),
             if (_currentStep < 2)
               CommandBarButton(
                 icon: const Icon(FluentIcons.forward),
                 label: const Text('Next'),
                 onPressed: (_canProceedToNext() && !creationState.isLoading) 
-                    ? () => setState(() => _currentStep++) 
+                    ? () {
+                        if (mounted && !_isDisposing) {
+                          setState(() => _currentStep++);
+                        }
+                      }
                     : null,
               ),
             if (_currentStep == 2)
@@ -218,7 +252,10 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   }
 
   Widget _buildEnhancedAudienceSelection() {
+    if (_isDisposing) return const Center(child: ProgressRing());
+    
     final clientsAsync = ref.watch(allClientsProvider);
+    final clientsWithTagsAsync = ref.watch(allClientsWithTagsProvider);
     final tagsAsync = ref.watch(allTagsProvider);
     
     return Column(
@@ -283,19 +320,23 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                       placeholder: 'Search clients by name, email, or company...',
                       prefix: const Icon(FluentIcons.search),
                       onChanged: (value) {
-                        setState(() {
-                          _searchTerm = value;
-                        });
-                        _applyFilters();
+                        if (mounted && !_isDisposing) {
+                          setState(() {
+                            _searchTerm = value;
+                          });
+                          _applyFilters();
+                        }
                       },
                     ),
                   ),
                   const SizedBox(width: 8),
                   Button(
                     onPressed: () {
-                      setState(() {
-                        _showAdvancedFilters = !_showAdvancedFilters;
-                      });
+                      if (mounted && !_isDisposing) {
+                        setState(() {
+                          _showAdvancedFilters = !_showAdvancedFilters;
+                        });
+                      }
                     },
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -335,14 +376,16 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                               size: TagChipSize.small,
                               isSelected: isSelected,
                               onTap: () {
-                                setState(() {
-                                  if (isSelected) {
-                                    _selectedTags.removeWhere((t) => t.id == tag.id);
-                                  } else {
-                                    _selectedTags.add(tag);
-                                  }
-                                });
-                                _applyFilters();
+                                if (mounted && !_isDisposing) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedTags.removeWhere((t) => t.id == tag.id);
+                                    } else {
+                                      _selectedTags.add(tag);
+                                    }
+                                  });
+                                  _applyFilters();
+                                }
                               },
                             );
                           }).toList(),
@@ -360,13 +403,15 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                   children: [
                     Button(
                       onPressed: _hasActiveFilters() ? () {
-                        setState(() {
-                          _searchController.clear();
-                          _searchTerm = '';
-                          _selectedTags.clear();
-                          _companyFilter = '';
-                        });
-                        _applyFilters();
+                        if (mounted && !_isDisposing) {
+                          setState(() {
+                            _searchController.clear();
+                            _searchTerm = '';
+                            _selectedTags.clear();
+                            _companyFilter = '';
+                          });
+                          _applyFilters();
+                        }
                       } : null,
                       child: const Text('Clear Filters'),
                     ),
@@ -404,18 +449,22 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                 const Spacer(),
                 Button(
                   onPressed: () {
-                    setState(() {
-                      _selectedClients = List.from(_filteredClients);
-                    });
+                    if (mounted && !_isDisposing) {
+                      setState(() {
+                        _selectedClients = List.from(_filteredClients);
+                      });
+                    }
                   },
                   child: const Text('Select All Filtered'),
                 ),
                 const SizedBox(width: 8),
                 Button(
                   onPressed: () {
-                    setState(() {
-                      _selectedClients.clear();
-                    });
+                    if (mounted && !_isDisposing) {
+                      setState(() {
+                        _selectedClients.clear();
+                      });
+                    }
                   },
                   child: const Text('Clear Selection'),
                 ),
@@ -438,8 +487,31 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
               // Initialize filtered clients if not done
               if (_filteredClients.isEmpty && _searchTerm.isEmpty && _selectedTags.isEmpty) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  setState(() {
-                    _filteredClients = clients;
+                  if (!mounted || _isDisposing) return;
+                  
+                  // Use clients with tags for initialization to ensure consistency
+                  clientsWithTagsAsync.whenData((clientsWithTags) {
+                    if (!mounted || _isDisposing) return;
+                    
+                    final clientModels = clientsWithTags.map((clientWithTags) => ClientModel(
+                      id: clientWithTags.id,
+                      firstName: clientWithTags.firstName,
+                      lastName: clientWithTags.lastName,
+                      email: clientWithTags.email,
+                      phone: clientWithTags.phone,
+                      company: clientWithTags.company,
+                      jobTitle: clientWithTags.jobTitle,
+                      address: null,
+                      notes: null,
+                      createdAt: DateTime.now(),
+                      updatedAt: DateTime.now(),
+                    )).toList();
+                    
+                    if (mounted && !_isDisposing) {
+                      setState(() {
+                        _filteredClients = clientModels;
+                      });
+                    }
                   });
                 });
               }
@@ -471,13 +543,15 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                     margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
                     child: GestureDetector(
                       onTap: () {
-                        setState(() {
-                          if (isSelected) {
-                            _selectedClients.removeWhere((c) => c.id == client.id);
-                          } else {
-                            _selectedClients.add(client);
-                          }
-                        });
+                        if (mounted && !_isDisposing) {
+                          setState(() {
+                            if (isSelected) {
+                              _selectedClients.removeWhere((c) => c.id == client.id);
+                            } else {
+                              _selectedClients.add(client);
+                            }
+                          });
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.all(12),
@@ -495,13 +569,15 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                             Checkbox(
                               checked: isSelected,
                               onChanged: (value) {
-                                setState(() {
-                                  if (value == true) {
-                                    _selectedClients.add(client);
-                                  } else {
-                                    _selectedClients.removeWhere((c) => c.id == client.id);
-                                  }
-                                });
+                                if (mounted && !_isDisposing) {
+                                  setState(() {
+                                    if (value == true) {
+                                      _selectedClients.add(client);
+                                    } else {
+                                      _selectedClients.removeWhere((c) => c.id == client.id);
+                                    }
+                                  });
+                                }
                               },
                             ),
                             const SizedBox(width: 12),
@@ -578,6 +654,8 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   }
 
   Widget _buildTemplateSelection() {
+    if (_isDisposing) return const Center(child: ProgressRing());
+    
     final templatesAsync = ref.watch(templatesProvider);
     
     return Column(
@@ -644,7 +722,11 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                         : null,
                     margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
                     child: GestureDetector(
-                      onTap: () => setState(() => _selectedTemplate = template),
+                      onTap: () {
+                        if (mounted && !_isDisposing) {
+                          setState(() => _selectedTemplate = template);
+                        }
+                      },
                       child: Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -658,7 +740,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                             RadioButton(
                               checked: isSelected,
                               onChanged: (checked) {
-                                if (checked == true) {
+                                if (checked == true && mounted && !_isDisposing) {
                                   setState(() => _selectedTemplate = template);
                                 }
                               },
@@ -984,10 +1066,12 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                           ),
                           child: Button(
                             onPressed: () {
-                              setState(() {
-                                _scheduledDate = null;
-                                _scheduledTime = null;
-                              });
+                              if (mounted && !_isDisposing) {
+                                setState(() {
+                                  _scheduledDate = null;
+                                  _scheduledTime = null;
+                                });
+                              }
                             },
                             child: Padding(
                               padding: const EdgeInsets.all(8),
@@ -1222,33 +1306,65 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
     );
   }
 
-  // Helper methods
+
   void _applyFilters() {
-    final clientsAsync = ref.read(allClientsProvider);
-    clientsAsync.whenData((clients) {
-      List<ClientModel> filtered = clients;
-      
-      // Apply search filter
-      if (_searchTerm.isNotEmpty) {
-        filtered = filtered.where((client) {
-          final searchLower = _searchTerm.toLowerCase();
-          return client.fullName.toLowerCase().contains(searchLower) ||
-                 (client.email?.toLowerCase().contains(searchLower) ?? false) ||
-                 (client.company?.toLowerCase().contains(searchLower) ?? false);
-        }).toList();
-      }
-      
-      // Apply tag filters (if tags are implemented in client model)
-      if (_selectedTags.isNotEmpty) {
-        // This would need to be implemented based on how tags are associated with clients
-        // For now, we'll skip this filter
-      }
-      
-      setState(() {
-        _filteredClients = filtered;
+    if (!mounted || _isDisposing) return;
+    
+    try {
+      final clientsWithTagsAsync = ref.read(allClientsWithTagsProvider);
+      clientsWithTagsAsync.whenData((clientsWithTags) {
+        if (!mounted || _isDisposing) return;
+        
+        List<ClientWithTags> filtered = clientsWithTags;
+        
+        // Apply search filter
+        if (_searchTerm.isNotEmpty) {
+          filtered = filtered.where((clientWithTags) {
+            final searchLower = _searchTerm.toLowerCase();
+            return clientWithTags.fullName.toLowerCase().contains(searchLower) ||
+                 (clientWithTags.email?.toLowerCase().contains(searchLower) ?? false) ||
+                 (clientWithTags.company?.toLowerCase().contains(searchLower) ?? false);
+          }).toList();
+        }
+        
+        // Apply tag filters - client must have ALL selected tags (AND logic)
+        if (_selectedTags.isNotEmpty) {
+          filtered = filtered.where((clientWithTags) {
+            // Check if client has all selected tags
+            final clientTagIds = clientWithTags.tags.map((tag) => tag.id).toSet();
+            final selectedTagIds = _selectedTags.map((tag) => tag.id).toSet();
+            
+            // Client must have all selected tags
+            return selectedTagIds.every((tagId) => clientTagIds.contains(tagId));
+          }).toList();
+        }
+        
+        // Convert ClientWithTags back to ClientModel for UI compatibility
+        final filteredClientModels = filtered.map((clientWithTags) => ClientModel(
+          id: clientWithTags.id,
+          firstName: clientWithTags.firstName,
+          lastName: clientWithTags.lastName,
+          email: clientWithTags.email,
+          phone: clientWithTags.phone,
+          company: clientWithTags.company,
+          jobTitle: clientWithTags.jobTitle,
+          address: null, // ClientWithTags doesn't have address field
+          notes: null,   // ClientWithTags doesn't have notes field
+          createdAt: DateTime.now(), // Placeholder since ClientWithTags doesn't have these
+          updatedAt: DateTime.now(), // Placeholder since ClientWithTags doesn't have these
+        )).toList();
+        
+        if (mounted && !_isDisposing) {
+          setState(() {
+            _filteredClients = filteredClientModels;
+          });
+        }
       });
-    });
+    } catch (e) {
+      // Silently handle any ref-related errors during filtering
+    }
   }
+
 
   bool _hasActiveFilters() {
     return _searchTerm.isNotEmpty || _selectedTags.isNotEmpty || _companyFilter.isNotEmpty;
@@ -1315,6 +1431,8 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   }
 
   void _showSchedulePicker() async {
+    if (_isDisposing) return;
+    
     final date = await showDatePicker(
       context: context,
       initialDate: DateTime.now().add(const Duration(hours: 1)),
@@ -1322,13 +1440,13 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     
-    if (date != null && mounted) {
+    if (date != null && mounted && !_isDisposing) {
       final time = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.now(),
       );
       
-      if (time != null) {
+      if (time != null && mounted && !_isDisposing) {
         setState(() {
           _scheduledDate = date;
           _scheduledTime = time;
@@ -1348,10 +1466,16 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
       _scheduledTime!.minute,
     );
     
-    return '${scheduledDateTime.day}/${scheduledDateTime.month}/${scheduledDateTime.year} at ${_scheduledTime!.format(context)}';
+    // Use DateFormat instead of TimeOfDay.format(context) to avoid context dependency
+    final dateFormat = DateFormat('dd/MM/yyyy');
+    final timeFormat = DateFormat('HH:mm');
+    
+    return '${dateFormat.format(scheduledDateTime)} at ${timeFormat.format(scheduledDateTime)}';
   }
 
   void _showTemplatePreview(TemplateModel template) {
+    if (_isDisposing) return;
+    
     showDialog(
       context: context,
       builder: (context) => TemplatePreviewDialog(
@@ -1364,6 +1488,9 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   }
 
   void _createCampaign() async {
+    // Check if widget is still mounted and not disposing before starting
+    if (!mounted || _isDisposing) return;
+    
     final scheduledDateTime = _scheduledDate != null && _scheduledTime != null
         ? DateTime(
             _scheduledDate!.year,
@@ -1371,35 +1498,70 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
             _scheduledDate!.day,
             _scheduledTime!.hour,
             _scheduledTime!.minute,
-          )
+        )
         : null;
 
-    final campaignId = await ref.read(campaignCreationProvider.notifier).createCampaign(
-      name: _campaignNameController.text.trim(),
-      templateId: _selectedTemplate!.id,
-      clientIds: _selectedClients.map((c) => c.id).toList(),
-      messageType: _selectedTemplate!.type,
-      scheduledAt: scheduledDateTime,
-      startImmediately: scheduledDateTime == null,
-    );
-
-    if (campaignId != null && mounted) {
-      displayInfoBar(
-        context,
-        builder: (context, close) => InfoBar(
-          title: const Text('Campaign Created'),
-          content: Text(
-            scheduledDateTime == null
-                ? 'Campaign "${_campaignNameController.text}" has been created and is now sending messages.'
-                : 'Campaign "${_campaignNameController.text}" has been scheduled for ${_formatScheduledTime()}.',
-          ),
-          severity: InfoBarSeverity.success,
-          onClose: close,
-        ),
+    try {
+      final campaignId = await ref.read(campaignCreationProvider.notifier).createCampaign(
+        name: _campaignNameController.text.trim(),
+        templateId: _selectedTemplate!.id,
+        clientIds: _selectedClients.map((c) => c.id).toList(),
+        messageType: _selectedTemplate!.type,
+        scheduledAt: scheduledDateTime,
+        startImmediately: scheduledDateTime == null,
       );
-      
-      // Navigate to campaigns list
-      context.go('/campaigns');
+
+      // Check if widget is still mounted and not disposing before showing UI feedback
+      if (!mounted || _isDisposing) return;
+
+      if (campaignId != null) {
+        // Store the formatted time before using it in the callback to avoid context access
+        final formattedTime = _formatScheduledTime();
+        final campaignName = _campaignNameController.text;
+        
+        // Use addPostFrameCallback to ensure UI operations happen after current build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _isDisposing) return;
+          
+          displayInfoBar(
+            context,
+            builder: (context, close) => InfoBar(
+              title: const Text('Campaign Created'),
+              content: Text(
+                scheduledDateTime == null
+                    ? 'Campaign "$campaignName" has been created and is now sending messages.'
+                    : 'Campaign "$campaignName" has been scheduled for $formattedTime.',
+              ),
+              severity: InfoBarSeverity.success,
+              onClose: close,
+            ),
+          );
+          
+          // Navigate to campaigns list after a short delay to ensure InfoBar is shown
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted && !_isDisposing) {
+              context.go('/campaigns');
+            }
+          });
+        });
+      }
+    } catch (e) {
+      // Handle any errors that might occur during campaign creation
+      if (mounted && !_isDisposing) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _isDisposing) return;
+          
+          displayInfoBar(
+            context,
+            builder: (context, close) => InfoBar(
+              title: const Text('Error'),
+              content: Text('Failed to create campaign: $e'),
+              severity: InfoBarSeverity.error,
+              onClose: close,
+            ),
+          );
+        });
+      }
     }
   }
 }

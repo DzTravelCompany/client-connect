@@ -384,7 +384,7 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
           margin: const EdgeInsets.only(top: 12),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.grey[10],
+            color: Colors.grey,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(

@@ -4,6 +4,8 @@ import 'package:client_connect/constants.dart';
 import 'package:client_connect/src/core/services/isolate_sending_service.dart';
 import 'package:client_connect/src/features/campaigns/data/campaign_dao.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+
 
 class SendingEngine {
   static SendingEngine? _instance;
@@ -131,6 +133,7 @@ class SendingIsolateController {
       SendingIsolateData(
         campaignId: campaignId,
         sendPort: _receivePort!.sendPort,
+        rootIsolateToken: RootIsolateToken.instance!,
       ),
     );
 
@@ -158,10 +161,12 @@ class SendingIsolateController {
 class SendingIsolateData {
   final int campaignId;
   final SendPort sendPort;
+  final RootIsolateToken rootIsolateToken;
 
   SendingIsolateData({
     required this.campaignId,
     required this.sendPort,
+    required this.rootIsolateToken,
   });
 }
 
@@ -196,9 +201,13 @@ class SendingError {
 // ISOLATE ENTRY POINT - This runs in the background isolate
 void _sendingIsolateEntryPoint(SendingIsolateData data) async {
   final receivePort = ReceivePort();
-  data.sendPort.send(receivePort.sendPort);
 
   try {
+
+    // CRITICAL: Initialize BackgroundIsolateBinaryMessenger first
+    BackgroundIsolateBinaryMessenger.ensureInitialized(data.rootIsolateToken);
+    // Send the receive port back to main isolate
+    data.sendPort.send(receivePort.sendPort);
     // Initialize database connection in isolate
     final sendingService = IsolateSendingService();
     await sendingService.initialize();
@@ -210,7 +219,8 @@ void _sendingIsolateEntryPoint(SendingIsolateData data) async {
     );
 
   } catch (e) {
-    data.sendPort.send(SendingError(e.toString()));
+    logger.e('Isolate error: $e', error: e);
+    data.sendPort.send(SendingError('Isolate initialization failed: $e'));
   }
 
   // Listen for stop commands
