@@ -3,11 +3,55 @@ import 'package:client_connect/src/features/templates/logic/tempalte_editor_prov
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class EditorInspector extends ConsumerWidget {
+class EditorInspector extends ConsumerStatefulWidget {
   const EditorInspector({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EditorInspector> createState() => _EditorInspectorState();
+}
+
+class _EditorInspectorState extends ConsumerState<EditorInspector> {
+  // Text controllers for different input fields
+  final Map<String, TextEditingController> _textControllers = {};
+  final Map<String, FocusNode> _focusNodes = {};
+
+  @override
+  void dispose() {
+    // Dispose all controllers and focus nodes
+    for (final controller in _textControllers.values) {
+      controller.dispose();
+    }
+    for (final focusNode in _focusNodes.values) {
+      focusNode.dispose();
+    }
+    super.dispose();
+  }
+
+  TextEditingController _getController(String key, String initialValue) {
+    if (!_textControllers.containsKey(key)) {
+      _textControllers[key] = TextEditingController(text: initialValue);
+    } else if (_textControllers[key]!.text != initialValue) {
+      // Only update if the value has changed externally
+      final controller = _textControllers[key]!;
+      final selection = controller.selection;
+      controller.text = initialValue;
+      // Restore cursor position if it's still valid
+      if (selection.start <= initialValue.length) {
+        controller.selection = selection;
+      }
+    }
+    return _textControllers[key]!;
+  }
+
+  FocusNode _getFocusNode(String key) {
+    if (!_focusNodes.containsKey(key)) {
+      _focusNodes[key] = FocusNode();
+    }
+    return _focusNodes[key]!;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final editorState = ref.watch(templateEditorProvider);
     final theme = FluentTheme.of(context);
 
@@ -373,6 +417,7 @@ class EditorInspector extends ConsumerWidget {
           [
             _buildTextInput(
               'Text Content',
+              '${block.id}_text',
               block.text,
               (value) => _updateBlock(ref, block.id, {'text': value}),
               maxLines: 3,
@@ -462,11 +507,13 @@ class EditorInspector extends ConsumerWidget {
           [
             _buildTextInput(
               'Image URL',
+              '${block.id}_imageUrl',
               block.imageUrl,
               (value) => _updateBlock(ref, block.id, {'imageUrl': value}),
             ),
             _buildTextInput(
               'Alt Text',
+              '${block.id}_altText',
               block.altText,
               (value) => _updateBlock(ref, block.id, {'altText': value}),
             ),
@@ -556,11 +603,13 @@ class EditorInspector extends ConsumerWidget {
           [
             _buildTextInput(
               'Button Text',
+              '${block.id}_text',
               block.text,
               (value) => _updateBlock(ref, block.id, {'text': value}),
             ),
             _buildTextInput(
               'Action URL',
+              '${block.id}_action',
               block.action,
               (value) => _updateBlock(ref, block.id, {'action': value}),
             ),
@@ -715,6 +764,7 @@ class EditorInspector extends ConsumerWidget {
             if (block.listType == 'bullet')
               _buildTextInput(
                 'Bullet Style',
+                '${block.id}_bulletStyle',
                 block.bulletStyle,
                 (value) => _updateBlock(ref, block.id, {'bulletStyle': value}),
               ),
@@ -748,6 +798,8 @@ class EditorInspector extends ConsumerWidget {
             ...block.items.asMap().entries.map((entry) {
               final index = entry.key;
               final item = entry.value;
+              final controllerKey = '${block.id}_item_$index';
+              
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: Row(
@@ -755,7 +807,8 @@ class EditorInspector extends ConsumerWidget {
                     Expanded(
                       child: TextBox(
                         placeholder: 'Item ${index + 1}',
-                        controller: TextEditingController(text: item),
+                        controller: _getController(controllerKey, item),
+                        focusNode: _getFocusNode(controllerKey),
                         onChanged: (value) {
                           final newItems = [...block.items];
                           newItems[index] = value;
@@ -770,6 +823,12 @@ class EditorInspector extends ConsumerWidget {
                         final newItems = [...block.items];
                         newItems.removeAt(index);
                         _updateBlock(ref, block.id, {'items': newItems});
+                        // Clean up controller for removed item
+                        final controllerKey = '${block.id}_item_$index';
+                        _textControllers[controllerKey]?.dispose();
+                        _textControllers.remove(controllerKey);
+                        _focusNodes[controllerKey]?.dispose();
+                        _focusNodes.remove(controllerKey);
                       },
                     ),
                   ],
@@ -812,6 +871,7 @@ class EditorInspector extends ConsumerWidget {
           [
             _buildTextInput(
               'Data/URL',
+              '${block.id}_data',
               block.data,
               (value) => _updateBlock(ref, block.id, {'data': value}),
               maxLines: 3,
@@ -896,6 +956,9 @@ class EditorInspector extends ConsumerWidget {
             ...block.socialLinks.asMap().entries.map((entry) {
               final index = entry.key;
               final link = entry.value;
+              final platformKey = '${block.id}_platform_$index';
+              final urlKey = '${block.id}_url_$index';
+              
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(12),
@@ -919,6 +982,15 @@ class EditorInspector extends ConsumerWidget {
                             final newLinks = [...block.socialLinks];
                             newLinks.removeAt(index);
                             _updateBlock(ref, block.id, {'socialLinks': newLinks});
+                            // Clean up controllers for removed link
+                            _textControllers[platformKey]?.dispose();
+                            _textControllers.remove(platformKey);
+                            _focusNodes[platformKey]?.dispose();
+                            _focusNodes.remove(platformKey);
+                            _textControllers[urlKey]?.dispose();
+                            _textControllers.remove(urlKey);
+                            _focusNodes[urlKey]?.dispose();
+                            _focusNodes.remove(urlKey);
                           },
                         ),
                       ],
@@ -926,7 +998,8 @@ class EditorInspector extends ConsumerWidget {
                     const SizedBox(height: 8),
                     TextBox(
                       placeholder: 'Platform (e.g., facebook)',
-                      controller: TextEditingController(text: link['platform'] ?? ''),
+                      controller: _getController(platformKey, link['platform'] ?? ''),
+                      focusNode: _getFocusNode(platformKey),
                       onChanged: (value) {
                         final newLinks = [...block.socialLinks];
                         newLinks[index] = {...link, 'platform': value};
@@ -936,7 +1009,8 @@ class EditorInspector extends ConsumerWidget {
                     const SizedBox(height: 8),
                     TextBox(
                       placeholder: 'URL',
-                      controller: TextEditingController(text: link['url'] ?? ''),
+                      controller: _getController(urlKey, link['url'] ?? ''),
+                      focusNode: _getFocusNode(urlKey),
                       onChanged: (value) {
                         final newLinks = [...block.socialLinks];
                         newLinks[index] = {...link, 'url': value};
@@ -983,6 +1057,7 @@ class EditorInspector extends ConsumerWidget {
           [
             _buildTextInput(
               'HTML Content',
+              '${block.id}_htmlContent',
               block.htmlContent,
               (value) => _updateBlock(ref, block.id, {'htmlContent': value}),
               maxLines: 5,
@@ -1052,6 +1127,7 @@ class EditorInspector extends ConsumerWidget {
 
   Widget _buildTextInput(
     String label,
+    String controllerKey,
     String value,
     Function(String) onChanged, {
     int maxLines = 1,
@@ -1063,7 +1139,8 @@ class EditorInspector extends ConsumerWidget {
         Text(label, style: const TextStyle(fontSize: 12)),
         const SizedBox(height: 4),
         TextBox(
-          controller: TextEditingController(text: value),
+          controller: _getController(controllerKey, value),
+          focusNode: _getFocusNode(controllerKey),
           onChanged: onChanged,
           maxLines: maxLines,
           placeholder: hint,
@@ -1192,7 +1269,8 @@ class EditorInspector extends ConsumerWidget {
             // Color input field with validation
             Expanded(
               child: TextBox(
-                controller: TextEditingController(text: colorValue),
+                controller: _getController('color_$label', colorValue),
+                focusNode: _getFocusNode('color_$label'),
                 onChanged: (value) {
                   // Validate hex color format
                   if (_isValidHexColor(value)) {

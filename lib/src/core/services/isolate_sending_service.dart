@@ -9,6 +9,7 @@ import 'package:mailer/smtp_server.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/database.dart';
+import '../../features/templates/data/template_model.dart';
 import 'sending_engine.dart';
 
 
@@ -147,7 +148,7 @@ class IsolateSendingService {
     }
   }
 
-  // Email sending implementation
+  // Email sending implementation with template block rendering
   Future<void> _sendEmail(
     Client client,
     Template template,
@@ -157,9 +158,27 @@ class IsolateSendingService {
       throw Exception('Client has no email address');
     }
 
-    // Personalize the message
-    final personalizedSubject = _personalizeMessage(template.subject ?? '', client);
-    final personalizedBody = _personalizeMessage(template.body, client);
+    // Convert database template to TemplateModel for advanced rendering
+    final templateModel = TemplateModel.fromDatabase(template);
+    
+    // Generate personalized content using template blocks
+    String personalizedSubject;
+    String personalizedBody;
+    
+    if (templateModel.hasBlocks) {
+      // Use the template model's advanced rendering system
+      personalizedSubject = _personalizeMessage(templateModel.subject ?? templateModel.name, client);
+      
+      // Generate HTML email body from template blocks
+      personalizedBody = templateModel.generateBodyFromBlocks(templateModel.templateType);
+      
+      // Apply personalization to the rendered HTML
+      personalizedBody = _personalizeHtmlContent(personalizedBody, client);
+    } else {
+      // Fallback to legacy rendering for templates without blocks
+      personalizedSubject = _personalizeMessage(template.subject ?? '', client);
+      personalizedBody = _personalizeMessage(template.body, client);
+    }
 
     // Create SMTP server configuration
     final smtpServer = SmtpServer(
@@ -175,13 +194,13 @@ class IsolateSendingService {
       ..from = Address(smtpSettings.username, smtpSettings.fromName)
       ..recipients.add(client.email!)
       ..subject = personalizedSubject
-      ..text = personalizedBody;
+      ..html = personalizedBody; // Use HTML instead of text for rich content
 
     // Send email
     await send(message, smtpServer);
   }
 
-  // WhatsApp sending implementation (placeholder for API integration)
+  // WhatsApp sending implementation with template block rendering
   Future<void> _sendWhatsApp(
     Client client,
     Template template,
@@ -191,8 +210,22 @@ class IsolateSendingService {
       throw Exception('Client has no phone number');
     }
 
-    // Personalize the message
-    final personalizedMessage = _personalizeMessage(template.body, client);
+    // Convert database template to TemplateModel for advanced rendering
+    final templateModel = TemplateModel.fromDatabase(template);
+    
+    // Generate personalized content using template blocks
+    String personalizedMessage;
+    
+    if (templateModel.hasBlocks) {
+      // Use the template model's advanced rendering system for WhatsApp
+      personalizedMessage = templateModel.generateBodyFromBlocks(templateModel.templateType);
+      
+      // Apply personalization to the rendered text
+      personalizedMessage = _personalizeMessage(personalizedMessage, client);
+    } else {
+      // Fallback to legacy rendering for templates without blocks
+      personalizedMessage = _personalizeMessage(template.body, client);
+    }
 
     // WhatsApp API call (example using a generic WhatsApp Business API)
     final response = await _dio.post(
@@ -230,6 +263,28 @@ class IsolateSendingService {
         .replaceAll('{{job_title}}', client.jobTitle ?? '[No Job Title]');
   }
 
+  // Enhanced personalization for HTML content (preserves HTML structure)
+  String _personalizeHtmlContent(String htmlContent, Client client) {
+    return htmlContent
+        .replaceAll('{{first_name}}', _escapeHtml(client.firstName))
+        .replaceAll('{{last_name}}', _escapeHtml(client.lastName))
+        .replaceAll('{{full_name}}', _escapeHtml('${client.firstName} ${client.lastName}'))
+        .replaceAll('{{email}}', _escapeHtml(client.email ?? '[No Email]'))
+        .replaceAll('{{phone}}', _escapeHtml(client.phone ?? '[No Phone]'))
+        .replaceAll('{{company}}', _escapeHtml(client.company ?? '[No Company]'))
+        .replaceAll('{{job_title}}', _escapeHtml(client.jobTitle ?? '[No Job Title]'));
+  }
+
+  // Helper method to escape HTML entities for safe insertion
+  String _escapeHtml(String text) {
+    return text
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+  }
+
   // Database helper methods
   Future<Campaign?> _getCampaign(int id) async {
     final query = _db.select(_db.campaigns)..where((c) => c.id.equals(id));
@@ -238,7 +293,14 @@ class IsolateSendingService {
 
   Future<Template?> _getTemplate(int id) async {
     final query = _db.select(_db.templates)..where((t) => t.id.equals(id));
-    return await query.getSingleOrNull();
+    final template = await query.getSingleOrNull();
+    
+    if (template != null) {
+      // Log template info for debugging
+      logger.i('Loaded template: ${template.name}, blocks: ${template.blocksJson?.isNotEmpty == true ? 'Yes' : 'No'}');
+    }
+    
+    return template;
   }
 
   Future<Client?> _getClient(int id) async {

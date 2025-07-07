@@ -301,6 +301,10 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
         color = Colors.orange;
         icon = FluentIcons.clock;
         break;
+      case 'scheduled':
+        color = Colors.purple;
+        icon = FluentIcons.calendar;
+        break;
       case 'in_progress':
         color = Colors.blue;
         icon = FluentIcons.send;

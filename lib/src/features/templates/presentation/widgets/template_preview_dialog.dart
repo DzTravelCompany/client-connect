@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:client_connect/constants.dart';
 import 'package:client_connect/src/features/templates/data/template_block_model.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:fluent_ui/fluent_ui.dart' hide Scrollbar;
@@ -1170,14 +1171,705 @@ class _TemplatePreviewDialogState extends State<TemplatePreviewDialog> {
     );
   }
 
-  void _performSpamCheck() {
-    displayInfoBar(
-      context,
-      builder: (context, close) => InfoBar(
-        title: const Text('Spam Check'),
-        content: const Text('Email passes basic spam filters. Score: 2/10'),
-        severity: InfoBarSeverity.success,
-        onClose: close,
+  // Enhanced spam detection system
+  void _performSpamCheck() async {
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => ContentDialog(
+        title: const Text('Analyzing Content'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ProgressRing(),
+            const SizedBox(height: 16),
+            const Text('Performing comprehensive spam analysis...'),
+          ],
+        ),
+      ),
+    );
+
+    // Simulate analysis delay for realistic UX
+    await Future.delayed(const Duration(milliseconds: 1500));
+
+    if (!mounted) return;
+    Navigator.of(context).pop(); // Close loading dialog
+
+    // Perform comprehensive spam analysis
+    final spamAnalysis = await _analyzeSpamContent();
+    
+    // Show detailed results
+    _showSpamAnalysisResults(spamAnalysis);
+  }
+
+  Future<SpamAnalysisResult> _analyzeSpamContent() async {
+    final analysis = SpamAnalysisResult();
+    
+    // Analyze subject line
+    analysis.subjectAnalysis = _analyzeSubjectLine(widget.templateSubject);
+    
+    // Analyze content blocks
+    analysis.contentAnalysis = _analyzeContentBlocks(widget.blocks);
+    
+    // Analyze HTML structure (for email templates)
+    if (widget.templateType == TemplateType.email) {
+      analysis.htmlAnalysis = _analyzeHtmlStructure();
+    }
+    
+    // Analyze links and URLs
+    analysis.linkAnalysis = _analyzeLinkContent();
+    
+    // Analyze image-to-text ratio
+    analysis.imageAnalysis = _analyzeImageContent();
+    
+    // Calculate overall spam score
+    analysis.calculateOverallScore();
+    
+    return analysis;
+  }
+
+  SubjectAnalysis _analyzeSubjectLine(String subject) {
+    final analysis = SubjectAnalysis();
+    final subjectWithData = _renderTextWithData(subject).toLowerCase();
+    
+    // Check for spam trigger words
+    final spamWords = [
+      'free', 'urgent', 'act now', 'limited time', 'click here', 'buy now',
+      'guaranteed', 'no risk', 'winner', 'congratulations', 'cash', 'money',
+      'earn', 'income', 'investment', 'loan', 'credit', 'debt', 'refinance',
+      'viagra', 'pharmacy', 'pills', 'weight loss', 'diet', 'casino',
+      'gambling', 'lottery', 'prize', 'gift', 'offer expires', 'act fast',
+      'don\'t delete', 'important information', 'requires immediate',
+      'time sensitive', 'final notice', 'last chance', 'expires today'
+    ];
+    
+    for (final word in spamWords) {
+      if (subjectWithData.contains(word)) {
+        analysis.spamWords.add(word);
+        analysis.score += 15; // High penalty for spam words
+      }
+    }
+    
+    // Check for excessive capitalization
+    final upperCaseCount = subject.replaceAll(RegExp(r'[^A-Z]'), '').length;
+    final totalLetters = subject.replaceAll(RegExp(r'[^a-zA-Z]'), '').length;
+    if (totalLetters > 0) {
+      final capsRatio = upperCaseCount / totalLetters;
+      if (capsRatio > 0.5) {
+        analysis.issues.add('Excessive capitalization (${(capsRatio * 100).round()}%)');
+        analysis.score += (capsRatio * 30).round();
+      }
+    }
+    
+    // Check for excessive punctuation
+    final punctuationCount = subject.replaceAll(RegExp(r'[^!?.]'), '').length;
+    if (punctuationCount > 3) {
+      analysis.issues.add('Excessive punctuation ($punctuationCount marks)');
+      analysis.score += punctuationCount * 5;
+    }
+    
+    // Check for numbers and special characters
+    if (RegExp(r'\$\d+').hasMatch(subjectWithData)) {
+      analysis.issues.add('Contains monetary amounts');
+      analysis.score += 10;
+    }
+    
+    // Check subject length
+    if (subject.length > 50) {
+      analysis.issues.add('Subject line too long (${subject.length} characters)');
+      analysis.score += 5;
+    } else if (subject.length < 10) {
+      analysis.issues.add('Subject line too short (${subject.length} characters)');
+      analysis.score += 5;
+    }
+    
+    // Check for empty subject
+    if (subject.trim().isEmpty) {
+      analysis.issues.add('Empty subject line');
+      analysis.score += 25;
+    }
+    
+    return analysis;
+  }
+
+  ContentAnalysis _analyzeContentBlocks(List<TemplateBlock> blocks) {
+    final analysis = ContentAnalysis();
+    
+    int totalTextLength = 0;
+    int imageCount = 0;
+    int linkCount = 0;
+    int buttonCount = 0;
+    
+    final allText = StringBuffer();
+    
+    for (final block in blocks) {
+      switch (block.type) {
+        case TemplateBlockType.text:
+          final textBlock = block as TextBlock;
+          final renderedText = _renderTextWithData(textBlock.text);
+          allText.writeln(renderedText);
+          totalTextLength += renderedText.length;
+          break;
+          
+        case TemplateBlockType.richText:
+          final richTextBlock = block as RichTextBlock;
+          final plainText = richTextBlock.htmlContent.replaceAll(RegExp(r'<[^>]*>'), '');
+          final renderedText = _renderTextWithData(plainText);
+          allText.writeln(renderedText);
+          totalTextLength += renderedText.length;
+          break;
+          
+        case TemplateBlockType.button:
+          final buttonBlock = block as ButtonBlock;
+          buttonCount++;
+          if (buttonBlock.action.isNotEmpty) {
+            linkCount++;
+            analysis.links.add(buttonBlock.action);
+          }
+          break;
+          
+        case TemplateBlockType.image:
+          imageCount++;
+          break;
+          
+        case TemplateBlockType.list:
+          final listBlock = block as ListBlock;
+          for (final item in listBlock.items) {
+            final renderedText = _renderTextWithData(item);
+            allText.writeln(renderedText);
+            totalTextLength += renderedText.length;
+          }
+          break;
+        default:
+          logger.i('block type not supported: ${block.type}');
+          break;
+      }
+    }
+    
+    final contentText = allText.toString().toLowerCase();
+    
+    // Analyze content for spam indicators
+    final spamPhrases = [
+      'click here', 'act now', 'limited time offer', 'buy now', 'order now',
+      'call now', 'don\'t wait', 'hurry up', 'last chance', 'final notice',
+      'urgent response required', 'immediate action required', 'expires soon',
+      'while supplies last', 'limited quantity', 'exclusive offer',
+      'special promotion', 'once in a lifetime', 'guaranteed results',
+      'no questions asked', 'risk free', '100% free', 'absolutely free',
+      'no cost', 'no fees', 'no obligation', 'no strings attached',
+      'make money fast', 'earn extra income', 'work from home',
+      'financial freedom', 'get rich quick', 'easy money'
+    ];
+    
+    for (final phrase in spamPhrases) {
+      if (contentText.contains(phrase)) {
+        analysis.spamPhrases.add(phrase);
+        analysis.score += 10;
+      }
+    }
+    
+    // Check for excessive capitalization in content
+    final upperCaseCount = allText.toString().replaceAll(RegExp(r'[^A-Z]'), '').length;
+    if (totalTextLength > 0) {
+      final capsRatio = upperCaseCount / totalTextLength;
+      if (capsRatio > 0.3) {
+        analysis.issues.add('Excessive capitalization in content (${(capsRatio * 100).round()}%)');
+        analysis.score += (capsRatio * 20).round();
+      }
+    }
+    
+    // Check for excessive exclamation marks
+    final exclamationCount = allText.toString().split('!').length - 1;
+    if (exclamationCount > 5) {
+      analysis.issues.add('Excessive exclamation marks ($exclamationCount)');
+      analysis.score += exclamationCount * 2;
+    }
+    
+    // Check content length
+    if (totalTextLength < 50) {
+      analysis.issues.add('Content too short ($totalTextLength characters)');
+      analysis.score += 15;
+    } else if (totalTextLength > 5000) {
+      analysis.issues.add('Content too long ($totalTextLength characters)');
+      analysis.score += 10;
+    }
+    
+    // Check button-to-content ratio
+    if (buttonCount > 0 && totalTextLength > 0) {
+      final buttonRatio = buttonCount / (totalTextLength / 100);
+      if (buttonRatio > 2) {
+        analysis.issues.add('Too many buttons relative to content');
+        analysis.score += 15;
+      }
+    }
+    
+    analysis.textLength = totalTextLength;
+    analysis.imageCount = imageCount;
+    analysis.linkCount = linkCount;
+    analysis.buttonCount = buttonCount;
+    
+    return analysis;
+  }
+
+  HtmlAnalysis _analyzeHtmlStructure() {
+    final analysis = HtmlAnalysis();
+    final htmlContent = _generateHtmlContent();
+    
+    // Check for inline styles vs CSS
+    final inlineStyleCount = RegExp(r'style\s*=').allMatches(htmlContent).length;
+    if (inlineStyleCount > 10) {
+      analysis.issues.add('Excessive inline styles ($inlineStyleCount)');
+      analysis.score += 5;
+    }
+    
+    // Check for proper HTML structure
+    if (!htmlContent.contains('<!DOCTYPE html>')) {
+      analysis.issues.add('Missing DOCTYPE declaration');
+      analysis.score += 5;
+    }
+    
+    // Check for meta tags
+    if (!htmlContent.contains('<meta charset=')) {
+      analysis.issues.add('Missing charset meta tag');
+      analysis.score += 3;
+    }
+    
+    if (!htmlContent.contains('<meta name="viewport"')) {
+      analysis.issues.add('Missing viewport meta tag');
+      analysis.score += 3;
+    }
+    
+    // Check for suspicious HTML patterns
+    if (htmlContent.contains('<script')) {
+      analysis.issues.add('Contains JavaScript (may be blocked)');
+      analysis.score += 20;
+    }
+    
+    if (htmlContent.contains('<iframe')) {
+      analysis.issues.add('Contains iframes (may be blocked)');
+      analysis.score += 15;
+    }
+    
+    // Check for proper alt text on images
+    final imgTags = RegExp(r'<img[^>]*>').allMatches(htmlContent);
+    int imagesWithoutAlt = 0;
+    for (final match in imgTags) {
+      if (!match.group(0)!.contains('alt=')) {
+        imagesWithoutAlt++;
+      }
+    }
+    
+    if (imagesWithoutAlt > 0) {
+      analysis.issues.add('$imagesWithoutAlt images missing alt text');
+      analysis.score += imagesWithoutAlt * 2;
+    }
+    
+    return analysis;
+  }
+
+  LinkAnalysis _analyzeLinkContent() {
+    final analysis = LinkAnalysis();
+    final allLinks = <String>[];
+    
+    // Collect all links from blocks
+    for (final block in widget.blocks) {
+      if (block.type == TemplateBlockType.button) {
+        final buttonBlock = block as ButtonBlock;
+        if (buttonBlock.action.isNotEmpty) {
+          allLinks.add(_renderTextWithData(buttonBlock.action));
+        }
+      }
+    }
+    
+    for (final link in allLinks) {
+      // Check for suspicious domains
+      final suspiciousDomains = [
+        'bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'ow.ly',
+        'short.link', 'tiny.cc', 'is.gd', 'buff.ly'
+      ];
+      
+      for (final domain in suspiciousDomains) {
+        if (link.contains(domain)) {
+          analysis.suspiciousLinks.add(link);
+          analysis.issues.add('Shortened URL detected: $domain');
+          analysis.score += 10;
+          break;
+        }
+      }
+      
+      // Check for HTTP vs HTTPS
+      if (link.startsWith('http://')) {
+        analysis.issues.add('Non-secure HTTP link: $link');
+        analysis.score += 5;
+      }
+      
+      // Check for suspicious TLDs
+      final suspiciousTlds = ['.tk', '.ml', '.ga', '.cf', '.click', '.download'];
+      for (final tld in suspiciousTlds) {
+        if (link.contains(tld)) {
+          analysis.suspiciousLinks.add(link);
+          analysis.issues.add('Suspicious TLD detected: $tld');
+          analysis.score += 15;
+          break;
+        }
+      }
+      
+      // Check for IP addresses instead of domains
+      if (RegExp(r'\d+\.\d+\.\d+\.\d+').hasMatch(link)) {
+        analysis.suspiciousLinks.add(link);
+        analysis.issues.add('IP address used instead of domain');
+        analysis.score += 20;
+      }
+    }
+    
+    analysis.totalLinks = allLinks.length;
+    return analysis;
+  }
+
+  ImageAnalysis _analyzeImageContent() {
+    final analysis = ImageAnalysis();
+    
+    int imageCount = 0;
+    int totalTextLength = 0;
+    
+    // Count images and text
+    for (final block in widget.blocks) {
+      switch (block.type) {
+        case TemplateBlockType.image:
+          imageCount++;
+          break;
+        case TemplateBlockType.text:
+          final textBlock = block as TextBlock;
+          totalTextLength += _renderTextWithData(textBlock.text).length;
+          break;
+        case TemplateBlockType.richText:
+          final richTextBlock = block as RichTextBlock;
+          final plainText = richTextBlock.htmlContent.replaceAll(RegExp(r'<[^>]*>'), '');
+          totalTextLength += _renderTextWithData(plainText).length;
+          break;
+        case TemplateBlockType.list:
+          final listBlock = block as ListBlock;
+          for (final item in listBlock.items) {
+            totalTextLength += _renderTextWithData(item).length;
+          }
+          break;
+        case TemplateBlockType.button:
+          final buttonBlock = block as ButtonBlock;
+          totalTextLength += _renderTextWithData(buttonBlock.text).length;
+          break;
+        default:
+          logger.i('block type not supported: ${block.type}');
+          break;
+      }
+    }
+    
+    analysis.imageCount = imageCount;
+    analysis.textLength = totalTextLength;
+    
+    // Calculate image-to-text ratio
+    if (totalTextLength > 0 && imageCount > 0) {
+      analysis.imageToTextRatio = imageCount / (totalTextLength / 100);
+      
+      // Flag if too many images relative to text
+      if (analysis.imageToTextRatio > 3) {
+        analysis.issues.add('High image-to-text ratio (${analysis.imageToTextRatio.toStringAsFixed(1)})');
+        analysis.score += 15;
+      }
+    }
+    
+    // Check for image-only emails
+    if (imageCount > 0 && totalTextLength < 50) {
+      analysis.issues.add('Mostly images with little text content');
+      analysis.score += 25;
+    }
+    
+    return analysis;
+  }
+
+  void _showSpamAnalysisResults(SpamAnalysisResult analysis) {
+    showDialog(
+      context: context,
+      builder: (context) => ContentDialog(
+        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+        title: Row(
+          children: [
+            Icon(
+              analysis.overallScore < 30 
+                  ? FluentIcons.completed_solid
+                  : analysis.overallScore < 60
+                      ? FluentIcons.bug_warning
+                      : FluentIcons.error_badge,
+              color: analysis.overallScore < 30 
+                  ? Colors.green
+                  : analysis.overallScore < 60
+                      ? Colors.orange
+                      : Colors.red,
+            ),
+            const SizedBox(width: 8),
+            Text('Spam Analysis Results'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Overall Score
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: analysis.overallScore < 30 
+                      ? Colors.green.withValues(alpha: 0.1)
+                      : analysis.overallScore < 60
+                          ? Colors.orange.withValues(alpha: 0.1)
+                          : Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: analysis.overallScore < 30 
+                        ? Colors.green
+                        : analysis.overallScore < 60
+                            ? Colors.orange
+                            : Colors.red,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Overall Spam Score: ${analysis.overallScore}/100',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      analysis.overallScore < 30 
+                          ? 'Low Risk - Email should pass most spam filters'
+                          : analysis.overallScore < 60
+                              ? 'Medium Risk - May be flagged by some spam filters'
+                              : 'High Risk - Likely to be flagged as spam',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 20),
+              
+              // Subject Analysis
+              if (analysis.subjectAnalysis.score > 0) ...[
+                _buildAnalysisSection(
+                  'Subject Line Issues',
+                  analysis.subjectAnalysis.issues,
+                  analysis.subjectAnalysis.spamWords.isNotEmpty 
+                      ? 'Spam words found: ${analysis.subjectAnalysis.spamWords.join(', ')}'
+                      : null,
+                  analysis.subjectAnalysis.score,
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // Content Analysis
+              if (analysis.contentAnalysis.score > 0) ...[
+                _buildAnalysisSection(
+                  'Content Issues',
+                  analysis.contentAnalysis.issues,
+                  analysis.contentAnalysis.spamPhrases.isNotEmpty 
+                      ? 'Spam phrases found: ${analysis.contentAnalysis.spamPhrases.join(', ')}'
+                      : null,
+                  analysis.contentAnalysis.score,
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // HTML Analysis
+              if (analysis.htmlAnalysis != null && analysis.htmlAnalysis!.score > 0) ...[
+                _buildAnalysisSection(
+                  'HTML Structure Issues',
+                  analysis.htmlAnalysis!.issues,
+                  null,
+                  analysis.htmlAnalysis!.score,
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // Link Analysis
+              if (analysis.linkAnalysis.score > 0) ...[
+                _buildAnalysisSection(
+                  'Link Issues',
+                  analysis.linkAnalysis.issues,
+                  analysis.linkAnalysis.suspiciousLinks.isNotEmpty 
+                      ? 'Suspicious links: ${analysis.linkAnalysis.suspiciousLinks.join(', ')}'
+                      : null,
+                  analysis.linkAnalysis.score,
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // Image Analysis
+              if (analysis.imageAnalysis.score > 0) ...[
+                _buildAnalysisSection(
+                  'Image Issues',
+                  analysis.imageAnalysis.issues,
+                  null,
+                  analysis.imageAnalysis.score,
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // Recommendations
+              if (analysis.overallScore > 0) ...[
+                const Text(
+                  'Recommendations:',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ...analysis.getRecommendations().map((rec) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Expanded(child: Text(rec)),
+                    ],
+                  ),
+                )),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          Button(
+            child: const Text('Close'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          if (analysis.overallScore > 30)
+            FilledButton(
+              child: const Text('View Suggestions'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showSpamFixSuggestions(analysis);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalysisSection(String title, List<String> issues, String? additionalInfo, int score) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const Spacer(),
+              Text(
+                '+$score points',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...issues.map((issue) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('• ', style: TextStyle(color: Colors.red)),
+                Expanded(child: Text(issue)),
+              ],
+            ),
+          )),
+          if (additionalInfo != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                additionalInfo,
+                style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showSpamFixSuggestions(SpamAnalysisResult analysis) {
+    showDialog(
+      context: context,
+      builder: (context) => ContentDialog(
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        title: const Text('Spam Fix Suggestions'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Here are specific suggestions to improve your spam score:',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              
+              ...analysis.getDetailedSuggestions().map((suggestion) => Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      suggestion.title,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(suggestion.description),
+                    if (suggestion.example != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Example: ${suggestion.example}',
+                          style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              )),
+            ],
+          ),
+        ),
+        actions: [
+          Button(
+            child: const Text('Close'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
       ),
     );
   }
@@ -1651,4 +2343,140 @@ class _TemplatePreviewDialogState extends State<TemplatePreviewDialog> {
       }
     }
   }
+}
+
+// Spam Analysis Data Classes
+class SpamAnalysisResult {
+  late SubjectAnalysis subjectAnalysis;
+  late ContentAnalysis contentAnalysis;
+  HtmlAnalysis? htmlAnalysis;
+  late LinkAnalysis linkAnalysis;
+  late ImageAnalysis imageAnalysis;
+  int overallScore = 0;
+
+  void calculateOverallScore() {
+    overallScore = subjectAnalysis.score +
+                  contentAnalysis.score +
+                  (htmlAnalysis?.score ?? 0) +
+                  linkAnalysis.score +
+                  imageAnalysis.score;
+  }
+
+  List<String> getRecommendations() {
+    final recommendations = <String>[];
+    
+    if (subjectAnalysis.score > 0) {
+      recommendations.add('Revise subject line to avoid spam trigger words');
+      recommendations.add('Reduce excessive capitalization and punctuation');
+    }
+    
+    if (contentAnalysis.score > 0) {
+      recommendations.add('Remove or replace spam phrases in content');
+      recommendations.add('Balance promotional language with informative content');
+    }
+    
+    if (htmlAnalysis != null && htmlAnalysis!.score > 0) {
+      recommendations.add('Improve HTML structure and add missing meta tags');
+      recommendations.add('Add alt text to all images');
+    }
+    
+    if (linkAnalysis.score > 0) {
+      recommendations.add('Use HTTPS links and avoid URL shorteners');
+      recommendations.add('Replace suspicious domains with trusted ones');
+    }
+    
+    if (imageAnalysis.score > 0) {
+      recommendations.add('Add more text content to balance image ratio');
+      recommendations.add('Ensure images have descriptive alt text');
+    }
+    
+    return recommendations;
+  }
+
+  List<SpamFixSuggestion> getDetailedSuggestions() {
+    final suggestions = <SpamFixSuggestion>[];
+    
+    if (subjectAnalysis.spamWords.isNotEmpty) {
+      suggestions.add(SpamFixSuggestion(
+        title: 'Replace Spam Words in Subject',
+        description: 'Replace trigger words with more neutral alternatives',
+        example: 'Instead of "FREE URGENT OFFER", use "Special Invitation"',
+      ));
+    }
+    
+    if (contentAnalysis.spamPhrases.isNotEmpty) {
+      suggestions.add(SpamFixSuggestion(
+        title: 'Rephrase Marketing Content',
+        description: 'Use softer, more professional language',
+        example: 'Instead of "Act now!", use "We invite you to learn more"',
+      ));
+    }
+    
+    if (linkAnalysis.suspiciousLinks.isNotEmpty) {
+      suggestions.add(SpamFixSuggestion(
+        title: 'Use Trusted Domains',
+        description: 'Replace shortened URLs with full, trusted domain links',
+        example: 'Use https://yourcompany.com/offer instead of bit.ly/xyz123',
+      ));
+    }
+    
+    if (imageAnalysis.imageToTextRatio > 2) {
+      suggestions.add(SpamFixSuggestion(
+        title: 'Add More Text Content',
+        description: 'Balance images with descriptive text content',
+        example: 'Add product descriptions, benefits, or testimonials',
+      ));
+    }
+    
+    return suggestions;
+  }
+}
+
+class SubjectAnalysis {
+  int score = 0;
+  List<String> issues = [];
+  List<String> spamWords = [];
+}
+
+class ContentAnalysis {
+  int score = 0;
+  List<String> issues = [];
+  List<String> spamPhrases = [];
+  List<String> links = [];
+  int textLength = 0;
+  int imageCount = 0;
+  int linkCount = 0;
+  int buttonCount = 0;
+}
+
+class HtmlAnalysis {
+  int score = 0;
+  List<String> issues = [];
+}
+
+class LinkAnalysis {
+  int score = 0;
+  List<String> issues = [];
+  List<String> suspiciousLinks = [];
+  int totalLinks = 0;
+}
+
+class ImageAnalysis {
+  int score = 0;
+  List<String> issues = [];
+  int imageCount = 0;
+  int textLength = 0;
+  double imageToTextRatio = 0.0;
+}
+
+class SpamFixSuggestion {
+  final String title;
+  final String description;
+  final String? example;
+
+  SpamFixSuggestion({
+    required this.title,
+    required this.description,
+    this.example,
+  });
 }

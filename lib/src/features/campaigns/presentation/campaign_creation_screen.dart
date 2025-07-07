@@ -37,9 +37,6 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   final List<TagModel> _selectedTags = [];
   String _companyFilter = '';
   bool _showAdvancedFilters = false;
-  
-  // Selection states
-  final bool _selectAllMode = false;
 
   // Track if we're in the process of disposing to prevent ref usage
   bool _isDisposing = false;

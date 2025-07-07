@@ -55,6 +55,34 @@ class EditorCanvas extends ConsumerWidget {
                 editorState.isPreviewMode ? 'Preview' : 'Canvas',
                 style: theme.typography.subtitle,
               ),
+              const SizedBox(width: 8),
+              // Template type indicator
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _getTemplateTypeColor(editorState.templateType).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _getTemplateTypeIcon(editorState.templateType),
+                      size: 12,
+                      color: _getTemplateTypeColor(editorState.templateType),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      editorState.templateType.name.toUpperCase(),
+                      style: TextStyle(
+                        color: _getTemplateTypeColor(editorState.templateType),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const Spacer(),
               if (!editorState.isPreviewMode) ...[
                 Container(
@@ -126,7 +154,7 @@ class EditorCanvas extends ConsumerWidget {
           child: Container(
             margin: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: _getCanvasBackgroundColor(editorState.templateType),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: theme.accentColor,
@@ -134,7 +162,7 @@ class EditorCanvas extends ConsumerWidget {
               ),
             ),
             child: editorState.blocks.isEmpty
-                ? _buildEmptyState(context, ref, dragDropState.isDragging)
+                ? _buildEmptyState(context, ref, dragDropState.isDragging, editorState.templateType)
                 : _buildCanvasContent(context, ref, editorState, dragDropState),
           ),
         ),
@@ -142,7 +170,36 @@ class EditorCanvas extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, WidgetRef ref, bool isDragging) {
+  Color _getTemplateTypeColor(TemplateType templateType) {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return const Color(0xFF25D366);
+      case TemplateType.email:
+        return const Color(0xFF007ACC);
+    }
+  }
+
+  IconData _getTemplateTypeIcon(TemplateType templateType) {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return FluentIcons.chat;
+      case TemplateType.email:
+        return FluentIcons.mail;
+    }
+  }
+
+  Color _getCanvasBackgroundColor(TemplateType? templateType) {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return const Color(0xFFF7F8FA); // WhatsApp-like background
+      case TemplateType.email:
+        return Colors.white; // Clean white for email
+      default:
+        return Colors.white;
+    }
+  }
+
+  Widget _buildEmptyState(BuildContext context, WidgetRef ref, bool isDragging, TemplateType? templateType) {
     final theme = FluentTheme.of(context);
     
     return DragTarget<TemplateBlockType>(
@@ -181,7 +238,7 @@ class EditorCanvas extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(50),
                   ),
                   child: Icon(
-                    isHovering ? FluentIcons.add : FluentIcons.canvas_app_template32,
+                    isHovering ? FluentIcons.add : _getTemplateTypeIcon(templateType ?? TemplateType.email),
                     size: 48,
                     color: isHovering
                         ? theme.accentColor
@@ -192,7 +249,7 @@ class EditorCanvas extends ConsumerWidget {
                 Text(
                   isHovering
                       ? 'Drop block here'
-                      : 'Start building your template',
+                      : 'Start building your ${templateType?.name ?? 'template'}',
                   style: theme.typography.subtitle?.copyWith(
                     color: isHovering
                         ? theme.accentColor
@@ -202,7 +259,7 @@ class EditorCanvas extends ConsumerWidget {
                 const SizedBox(height: 8),
                 if (!isHovering)
                   Text(
-                    'Drag blocks from the toolbox or click to add',
+                    _getEmptyStateMessage(templateType),
                     style: theme.typography.body?.copyWith(
                       color: theme.inactiveColor,
                     ),
@@ -216,6 +273,17 @@ class EditorCanvas extends ConsumerWidget {
     );
   }
 
+  String _getEmptyStateMessage(TemplateType? templateType) {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return 'Drag blocks to create your WhatsApp message\nOptimized for mobile viewing';
+      case TemplateType.email:
+        return 'Drag blocks to create your email template\nOptimized for email clients';
+      default:
+        return 'Drag blocks from the toolbox or click to add';
+    }
+  }
+
   Widget _buildCanvasContent(
     BuildContext context,
     WidgetRef ref,
@@ -223,30 +291,65 @@ class EditorCanvas extends ConsumerWidget {
     DragDropState dragDropState,
   ) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Drop zone at the top (only in edit mode)
-          if (!state.isPreviewMode)
-            _buildDropZone(context, ref, 0, dragDropState.isDragging),
-          
-          // Blocks with drop zones between them
-          for (int i = 0; i < state.blocks.length; i++) ...[
-            _buildBlockWrapper(
-              context,
-              ref,
-              state.blocks[i],
-              state.selectedBlockId == state.blocks[i].id,
-              i,
-              state.isPreviewMode,
-            ),
+      padding: _getCanvasPadding(state.templateType),
+      child: ConstrainedBox(
+        constraints: _getCanvasConstraints(state.templateType),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Drop zone at the top (only in edit mode)
             if (!state.isPreviewMode)
-              _buildDropZone(context, ref, i + 1, dragDropState.isDragging),
+              _buildDropZone(context, ref, 0, dragDropState.isDragging),
+            
+            // Blocks with drop zones between them
+            for (int i = 0; i < state.blocks.length; i++) ...[
+              _buildBlockWrapper(
+                context,
+                ref,
+                state.blocks[i],
+                state.selectedBlockId == state.blocks[i].id,
+                i,
+                state.isPreviewMode,
+                state.templateType,
+              ),
+              if (!state.isPreviewMode)
+                _buildDropZone(context, ref, i + 1, dragDropState.isDragging),
+            ],
           ],
-        ],
+        ),
       ),
     );
+  }
+
+  EdgeInsets _getCanvasPadding(TemplateType? templateType) {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return const EdgeInsets.all(12); // Compact padding for mobile
+      case TemplateType.email:
+        return const EdgeInsets.all(20); // Standard email padding
+      default:
+        return const EdgeInsets.all(20);
+    }
+  }
+
+  BoxConstraints _getCanvasConstraints(TemplateType? templateType) {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return const BoxConstraints(
+          maxWidth: 350, // Mobile-first width
+          minHeight: 400,
+        );
+      case TemplateType.email:
+        return const BoxConstraints(
+          maxWidth: 600, // Standard email width
+          minHeight: 400,
+        );
+      default:
+        return const BoxConstraints(
+          maxWidth: 600,
+          minHeight: 400,
+        );
+    }
   }
 
   Widget _buildDropZone(BuildContext context, WidgetRef ref, int index, bool isDragging) {
@@ -315,11 +418,12 @@ class EditorCanvas extends ConsumerWidget {
     bool isSelected,
     int index,
     bool isPreviewMode,
+    TemplateType? templateType,
   ) {
     final theme = FluentTheme.of(context);
     
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      margin: const EdgeInsets.symmetric(vertical: 2),
       child: GestureDetector(
         onTap: !isPreviewMode ? () {
           ref.read(templateEditorProvider.notifier).selectBlock(block.id);
@@ -344,7 +448,7 @@ class EditorCanvas extends ConsumerWidget {
                       ? theme.accentColor.withValues(alpha: 0.02)
                       : Colors.transparent,
                 ),
-                child: _buildBlockWidget(block),
+                child: _buildBlockWidget(block, templateType),
               ),
               if (isSelected && !isPreviewMode) 
                 _buildBlockControls(context, ref, block),
@@ -355,26 +459,53 @@ class EditorCanvas extends ConsumerWidget {
     );
   }
 
-  Widget _buildBlockWidget(TemplateBlock block) {
+  Widget _buildBlockWidget(TemplateBlock block, TemplateType? templateType) {
     switch (block.type) {
       case TemplateBlockType.text:
-        return TextBlockWidget(block: block as TextBlock);
+        return TextBlockWidget(
+          block: block as TextBlock,
+          templateType: templateType,
+        );
       case TemplateBlockType.richText:
-        return RichTextBlockWidget(block: block as RichTextBlock);
+        return RichTextBlockWidget(
+          block: block as RichTextBlock,
+          templateType: templateType,
+        );
       case TemplateBlockType.image:
-        return ImageBlockWidget(block: block as ImageBlock);
+        return ImageBlockWidget(
+          block: block as ImageBlock,
+          templateType: templateType,
+        );
       case TemplateBlockType.button:
-        return ButtonBlockWidget(block: block as ButtonBlock);
+        return ButtonBlockWidget(
+          block: block as ButtonBlock,
+          templateType: templateType,
+        );
       case TemplateBlockType.spacer:
-        return SpacerBlockWidget(block: block as SpacerBlock);
+        return SpacerBlockWidget(
+          block: block as SpacerBlock,
+          templateType: templateType,
+        );
       case TemplateBlockType.divider:
-        return DividerBlockWidget(block: block as DividerBlock);
+        return DividerBlockWidget(
+          block: block as DividerBlock,
+          templateType: templateType,
+        );
       case TemplateBlockType.list:
-        return ListBlockWidget(block: block as ListBlock);
+        return ListBlockWidget(
+          block: block as ListBlock,
+          templateType: templateType,
+        );
       case TemplateBlockType.qrCode:
-        return QRCodeBlockWidget(block: block as QRCodeBlock);
+        return QRCodeBlockWidget(
+          block: block as QRCodeBlock,
+          templateType: templateType,
+        );
       case TemplateBlockType.social:
-        return SocialBlockWidget(block: block as SocialBlock);
+        return SocialBlockWidget(
+          block: block as SocialBlock,
+          templateType: templateType,
+        );
       default:
         return Container(
           padding: const EdgeInsets.all(16),

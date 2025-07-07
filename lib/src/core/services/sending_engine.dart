@@ -10,12 +10,33 @@ import 'package:flutter/services.dart';
 class SendingEngine {
   static SendingEngine? _instance;
   static SendingEngine get instance => _instance ??= SendingEngine._();
-  SendingEngine._();
+  SendingEngine._() {
+    _initScheduledCampaignsChecker();
+  }
 
   final Map<int, SendingIsolateController> _activeIsolates = {};
   final StreamController<CampaignProgress> _progressController = StreamController.broadcast();
+  Timer? _scheduledCampaignsTimer;
 
   Stream<CampaignProgress> get progressStream => _progressController.stream;
+
+  void _initScheduledCampaignsChecker() {
+    // Check for scheduled campaigns every minute
+    _scheduledCampaignsTimer = Timer.periodic(const Duration(seconds: 60), (timer) async {
+      try {
+        final campaignDao = CampaignDao();
+        final dueCampaigns = await campaignDao.getDueScheduledCampaigns();
+        for (final campaign in dueCampaigns) {
+          if (!_activeIsolates.containsKey(campaign.id)) {
+            logger.i('Starting scheduled campaign ${campaign.id}: ${campaign.name}');
+            await startCampaign(campaign.id);
+          }
+        }
+      } catch (e) {
+        logger.e('Error checking for scheduled campaigns: $e');
+      }
+    });
+  }
 
   // Start sending a campaign
   Future<void> startCampaign(int campaignId) async {
@@ -104,6 +125,7 @@ class SendingEngine {
   }
 
   void dispose() {
+    _scheduledCampaignsTimer?.cancel();
     _progressController.close();
     for (final controller in _activeIsolates.values) {
       controller.stop();

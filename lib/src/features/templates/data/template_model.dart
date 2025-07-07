@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:client_connect/constants.dart';
 import 'package:client_connect/src/core/models/database.dart' show Template, TemplatesCompanion;
 import 'package:client_connect/src/features/templates/data/template_block_model.dart';
 import 'package:drift/drift.dart';
@@ -97,55 +98,288 @@ class TemplateModel {
     );
   }
 
-  // Generate plain text body from blocks for backward compatibility
+  // Generate proper HTML/text body from blocks based on template type
   String _generateBodyFromBlocks() {
+    if (blocks.isEmpty) return '';
+    
+    switch (templateType) {
+      case TemplateType.email:
+        return _generateEmailHtml();
+      case TemplateType.whatsapp:
+        return _generateWhatsAppText();
+    }
+  }
+
+
+    String generateBodyFromBlocks(TemplateType templateType) {
+
+      switch (templateType) {
+        case TemplateType.email:
+          return _generateEmailHtml();
+        case TemplateType.whatsapp:
+          return _generateWhatsAppText();
+      }
+  }
+
+
+  // Generate HTML for email templates
+  String _generateEmailHtml() {
     final buffer = StringBuffer();
     
+    // Start with email-safe HTML structure
+    buffer.writeln('<!DOCTYPE html>');
+    buffer.writeln('<html>');
+    buffer.writeln('<head>');
+    buffer.writeln('<meta charset="UTF-8">');
+    buffer.writeln('<meta name="viewport" content="width=device-width, initial-scale=1.0">');
+    buffer.writeln('<title>${subject ?? name}</title>');
+    buffer.writeln('<style>');
+    buffer.writeln('body { font-family: Arial, Helvetica, sans-serif; line-height: 1.6; margin: 0; padding: 20px; }');
+    buffer.writeln('.container { max-width: 600px; margin: 0 auto; }');
+    buffer.writeln('.button { display: inline-block; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; text-align: center; }');
+    buffer.writeln('.divider { border: none; height: 1px; margin: 20px 0; }');
+    buffer.writeln('.spacer { height: 20px; }');
+    buffer.writeln('img { max-width: 100%; height: auto; }');
+    buffer.writeln('</style>');
+    buffer.writeln('</head>');
+    buffer.writeln('<body>');
+    buffer.writeln('<div class="container">');
+    
     for (final block in blocks) {
-      switch (block.type) {
-        case TemplateBlockType.text:
-          final textBlock = block as TextBlock;
-          buffer.writeln(textBlock.text);
-          break;
-        case TemplateBlockType.richText:
-          final richTextBlock = block as RichTextBlock;
-          // Strip HTML tags for plain text
-          final plainText = richTextBlock.htmlContent
-              .replaceAll(RegExp(r'<[^>]*>'), '')
-              .replaceAll('&nbsp;', ' ')
-              .replaceAll('&amp;', '&')
-              .replaceAll('&lt;', '<')
-              .replaceAll('&gt;', '>');
-          buffer.writeln(plainText);
-          break;
-        case TemplateBlockType.button:
-          final buttonBlock = block as ButtonBlock;
-          buffer.writeln('[${buttonBlock.text}]');
-          break;
+      buffer.writeln(_generateEmailBlockHtml(block));
+    }
+    
+    buffer.writeln('</div>');
+    buffer.writeln('</body>');
+    buffer.writeln('</html>');
+    
+    return buffer.toString();
+  }
 
-        case TemplateBlockType.list:
-          final listBlock = block as ListBlock;
-          for (int i = 0; i < listBlock.items.length; i++) {
-            final prefix = listBlock.listType == 'numbered' 
-                ? '${i + 1}. ' 
-                : '${listBlock.bulletStyle} ';
-            buffer.writeln('$prefix${listBlock.items[i]}');
-          }
-          break;
-        case TemplateBlockType.spacer:
-          buffer.writeln(); // Add empty line for spacer
-          break;
-        case TemplateBlockType.divider:
-          buffer.writeln('---'); // Simple divider representation
-          break;
-        default:
-          // For other block types, add a placeholder
-          buffer.writeln('[${block.type.name.toUpperCase()} BLOCK]');
-          break;
+  // Generate individual block HTML for email
+  String _generateEmailBlockHtml(TemplateBlock block) {
+    switch (block.type) {
+      case TemplateBlockType.text:
+        final textBlock = block as TextBlock;
+        final style = _buildEmailTextStyle(textBlock);
+        final alignment = textBlock.alignment == 'center' ? 'center' : 
+                         textBlock.alignment == 'right' ? 'right' : 'left';
+        return '<p style="$style text-align: $alignment;">${_escapeHtml(textBlock.text)}</p>';
+      
+      case TemplateBlockType.richText:
+        final richTextBlock = block as RichTextBlock;
+        return '<div style="font-size: ${richTextBlock.fontSize}px; font-family: ${richTextBlock.fontFamily}; line-height: ${richTextBlock.lineHeight};">${richTextBlock.htmlContent}</div>';
+      
+      case TemplateBlockType.image:
+        final imageBlock = block as ImageBlock;
+        final alignment = imageBlock.alignment == 'center' ? 'center' : 
+                         imageBlock.alignment == 'right' ? 'right' : 'left';
+        final style = 'max-width: ${imageBlock.width}px; height: auto; border-radius: ${imageBlock.borderRadius}px;';
+        final borderStyle = imageBlock.borderWidth > 0 ? 'border: ${imageBlock.borderWidth}px solid ${imageBlock.borderColor};' : '';
+        logger.i('Image URL: ${imageBlock.imageUrl}');
+        return '<div style="text-align: $alignment;"><img src="${imageBlock.imageUrl}" alt="${imageBlock.altText}" style="$style $borderStyle" /></div>';
+      
+      case TemplateBlockType.button:
+        final buttonBlock = block as ButtonBlock;
+        final alignment = buttonBlock.alignment == 'center' ? 'center' : 
+                         buttonBlock.alignment == 'right' ? 'right' : 'left';
+        final buttonStyle = 'background-color: ${buttonBlock.backgroundColor}; color: ${buttonBlock.textColor}; padding: 12px 24px; text-decoration: none; border-radius: ${buttonBlock.borderRadius}px; display: inline-block; font-weight: bold;';
+        final actionUrl = buttonBlock.actionType == 'url' ? buttonBlock.action : '#';
+        return '<div style="text-align: $alignment; margin: 20px 0;"><a href="$actionUrl" style="$buttonStyle">${_escapeHtml(buttonBlock.text)}</a></div>';
+      
+      case TemplateBlockType.list:
+        final listBlock = block as ListBlock;
+        final listTag = listBlock.listType == 'numbered' ? 'ol' : 'ul';
+        final listStyle = 'font-size: ${listBlock.fontSize}px; color: ${listBlock.color}; margin: ${listBlock.spacing}px 0;';
+        final buffer = StringBuffer('<$listTag style="$listStyle">');
+        for (final item in listBlock.items) {
+          buffer.writeln('<li>${_escapeHtml(item)}</li>');
+        }
+        buffer.writeln('</$listTag>');
+        return buffer.toString();
+      
+      case TemplateBlockType.spacer:
+        final spacerBlock = block as SpacerBlock;
+        return '<div class="spacer" style="height: ${spacerBlock.height}px;"></div>';
+      
+      case TemplateBlockType.divider:
+        final dividerBlock = block as DividerBlock;
+        final style = 'border: none; height: ${dividerBlock.thickness}px; background-color: ${dividerBlock.color}; width: ${dividerBlock.width}%; margin: 20px auto;';
+        return '<hr style="$style" />';
+      
+      case TemplateBlockType.social:
+        final socialBlock = block as SocialBlock;
+        final buffer = StringBuffer('<div style="text-align: center; margin: 20px 0;">');
+        for (final link in socialBlock.socialLinks) {
+          final platform = link['platform'] ?? '';
+          final url = link['url'] ?? '';
+          buffer.writeln('<a href="$url" style="margin: 0 10px; text-decoration: none;">${platform.toUpperCase()}</a>');
+        }
+        buffer.writeln('</div>');
+        return buffer.toString();
+      
+      default:
+        return '<!-- Unsupported block type: ${block.type.name} -->';
+    }
+  }
+
+  // Generate formatted text for WhatsApp
+  String _generateWhatsAppText() {
+    final buffer = StringBuffer();
+    
+    for (int i = 0; i < blocks.length; i++) {
+      final blockText = _generateWhatsAppBlockText(blocks[i]);
+      if (blockText.isNotEmpty) {
+        buffer.writeln(blockText);
+        
+        // Add spacing between blocks (except for spacer blocks)
+        if (i < blocks.length - 1 && blocks[i].type != TemplateBlockType.spacer) {
+          buffer.writeln();
+        }
       }
     }
     
     return buffer.toString().trim();
+  }
+
+  // Generate individual block text for WhatsApp
+  String _generateWhatsAppBlockText(TemplateBlock block) {
+    switch (block.type) {
+      case TemplateBlockType.text:
+        final textBlock = block as TextBlock;
+        String text = textBlock.text;
+        
+        // Apply WhatsApp formatting
+        if (textBlock.fontWeight == 'bold') {
+          text = '*$text*';
+        }
+        if (textBlock.italic) {
+          text = '_${text}_';
+        }
+        
+        return text;
+      
+      case TemplateBlockType.richText:
+        final richTextBlock = block as RichTextBlock;
+        return _stripHtmlForWhatsApp(richTextBlock.htmlContent);
+      
+      case TemplateBlockType.image:
+        final imageBlock = block as ImageBlock;
+        return imageBlock.imageUrl.isNotEmpty 
+            ? '📷 Image: ${imageBlock.altText.isNotEmpty ? imageBlock.altText : 'Attached'}'
+            : '📷 [Image]';
+      
+      case TemplateBlockType.button:
+        final buttonBlock = block as ButtonBlock;
+        return '🔗 ${buttonBlock.text}${buttonBlock.action.isNotEmpty ? '\n${buttonBlock.action}' : ''}';
+      
+      case TemplateBlockType.list:
+        final listBlock = block as ListBlock;
+        final buffer = StringBuffer();
+        for (int i = 0; i < listBlock.items.length; i++) {
+          final prefix = listBlock.listType == 'numbered' 
+              ? '${i + 1}. ' 
+              : '• ';
+          buffer.writeln('$prefix${listBlock.items[i]}');
+        }
+        return buffer.toString().trim();
+      
+      case TemplateBlockType.spacer:
+        final spacerBlock = block as SpacerBlock;
+        // Create visual spacing with appropriate line breaks
+        final lines = (spacerBlock.height / 20).round().clamp(1, 3);
+        return '\n' * lines;
+      
+      case TemplateBlockType.divider:
+        return '─' * 20; // WhatsApp-friendly divider
+      
+      case TemplateBlockType.qrCode:
+        final qrBlock = block as QRCodeBlock;
+        return '📱 QR Code: ${qrBlock.data}';
+      
+      case TemplateBlockType.social:
+        final socialBlock = block as SocialBlock;
+        final buffer = StringBuffer('🔗 Follow us:\n');
+        for (final link in socialBlock.socialLinks) {
+          final platform = link['platform'] ?? '';
+          final url = link['url'] ?? '';
+          buffer.writeln('${platform.toUpperCase()}: $url');
+        }
+        return buffer.toString().trim();
+      
+      default:
+        return '';
+    }
+  }
+
+  // Helper method to build email text styles
+  String _buildEmailTextStyle(TextBlock textBlock) {
+    final styles = <String>[];
+    
+    styles.add('font-size: ${textBlock.fontSize}px');
+    styles.add('color: ${textBlock.color}');
+    styles.add('line-height: ${textBlock.lineHeight}');
+    styles.add('letter-spacing: ${textBlock.letterSpacing}px');
+    
+    if (textBlock.fontFamily != 'default') {
+      styles.add('font-family: ${textBlock.fontFamily}, Arial, sans-serif');
+    } else {
+      styles.add('font-family: Arial, Helvetica, sans-serif');
+    }
+    
+    switch (textBlock.fontWeight) {
+      case 'bold':
+        styles.add('font-weight: bold');
+        break;
+      case 'light':
+        styles.add('font-weight: 300');
+        break;
+      case 'medium':
+        styles.add('font-weight: 500');
+        break;
+      default:
+        styles.add('font-weight: normal');
+    }
+    
+    if (textBlock.italic) {
+      styles.add('font-style: italic');
+    }
+    
+    if (textBlock.underline) {
+      styles.add('text-decoration: underline');
+    }
+    
+    return '${styles.join('; ')};';
+  }
+
+  // Helper method to escape HTML
+  String _escapeHtml(String text) {
+    return text
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+  }
+
+  // Helper method to strip HTML for WhatsApp
+  String _stripHtmlForWhatsApp(String htmlContent) {
+    return htmlContent
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<p[^>]*>', caseSensitive: false), '')
+        .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<strong[^>]*>|<b[^>]*>', caseSensitive: false), '*')
+        .replaceAll(RegExp(r'</strong>|</b>', caseSensitive: false), '*')
+        .replaceAll(RegExp(r'<em[^>]*>|<i[^>]*>', caseSensitive: false), '_')
+        .replaceAll(RegExp(r'</em>|</i>', caseSensitive: false), '_')
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .trim();
   }
 
   // Get template type as string
@@ -367,5 +601,5 @@ class TemplateModel {
 
 // Extension to add helper methods to Template from database
 extension TemplateExtension on Template {
-  TemplateModel toModel() => TemplateModel.fromDatabase(this);
+  TemplateModel toModel() => TemplateModel.fromDatabase(this).copyWith();
 }

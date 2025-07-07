@@ -8,8 +8,13 @@ import 'package:file_picker/file_picker.dart';
 
 class ImageBlockWidget extends ConsumerWidget {
   final ImageBlock block;
+  final TemplateType? templateType;
 
-  const ImageBlockWidget({super.key, required this.block});
+  const ImageBlockWidget({
+    super.key, 
+    required this.block,
+    this.templateType,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -18,43 +23,86 @@ class ImageBlockWidget extends ConsumerWidget {
     final isSelected = editorState.selectedBlockId == block.id;
     
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: _getPlatformPadding(),
       child: _buildImageContent(context, theme, ref, isSelected, editorState.isPreviewMode),
     );
   }
 
+  EdgeInsets _getPlatformPadding() {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return const EdgeInsets.symmetric(horizontal: 8, vertical: 4);
+      case TemplateType.email:
+        return const EdgeInsets.all(16);
+      default:
+        return const EdgeInsets.all(16);
+    }
+  }
+
   Widget _buildImageContent(BuildContext context, FluentThemeData theme, WidgetRef ref, bool isSelected, bool isPreviewMode) {
     final alignment = _parseAlignment(block.alignment);
+    final constraints = _getImageConstraints();
     
     return Align(
       alignment: alignment,
-      child: Stack(
-        children: [
-          block.imageUrl.isEmpty
-              ? _buildPlaceholder(theme, ref, isSelected, isPreviewMode)
-              : _buildImage(theme, ref, isSelected, isPreviewMode),
-          if (isSelected && !isPreviewMode)
-            _buildSelectionOverlay(theme, ref),
-        ],
+      child: ConstrainedBox(
+        constraints: constraints,
+        child: Stack(
+          children: [
+            block.imageUrl.isEmpty
+                ? _buildPlaceholder(theme, ref, isSelected, isPreviewMode)
+                : _buildImage(theme, ref, isSelected, isPreviewMode),
+            if (isSelected && !isPreviewMode)
+              _buildSelectionOverlay(theme, ref),
+          ],
+        ),
       ),
     );
   }
 
+  BoxConstraints _getImageConstraints() {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return BoxConstraints(
+          maxWidth: 300, // WhatsApp image width limit
+          maxHeight: 300,
+          minWidth: 100,
+          minHeight: 100,
+        );
+      case TemplateType.email:
+        return BoxConstraints(
+          maxWidth: 580, // Email-safe width (600px container - 20px padding)
+          maxHeight: 400,
+          minWidth: 50,
+          minHeight: 50,
+        );
+      default:
+        return BoxConstraints(
+          maxWidth: block.width,
+          maxHeight: block.height,
+          minWidth: 50,
+          minHeight: 50,
+        );
+    }
+  }
+
   Widget _buildPlaceholder(FluentThemeData theme, WidgetRef ref, bool isSelected, bool isPreviewMode) {
+    final size = _getPlaceholderSize();
+    
     return GestureDetector(
       onTap: isSelected && !isPreviewMode ? () => _pickImage(ref) : null,
       child: Container(
-        width: block.width,
-        height: block.height,
+        width: size.width,
+        height: size.height,
         decoration: BoxDecoration(
-          color: theme.cardColor,
-          borderRadius: BorderRadius.circular(block.borderRadius),
+          color: _getPlaceholderBackgroundColor(theme),
+          borderRadius: BorderRadius.circular(_getResponsiveBorderRadius()),
           border: Border.all(
             color: isSelected 
                 ? theme.accentColor
                 : block.borderWidth > 0 
                     ? _parseColor(block.borderColor)
-                    : theme.accentColor.withValues(alpha: 0.3),
+                    : _getPlaceholderBorderColor(theme),
             width: isSelected ? 2 : (block.borderWidth > 0 ? block.borderWidth : 1),
           ),
         ),
@@ -63,27 +111,49 @@ class ImageBlockWidget extends ConsumerWidget {
           children: [
             Icon(
               FluentIcons.file_image,
-              size: 32,
-              color: theme.inactiveColor,
+              size: _getIconSize(),
+              color: _getPlaceholderIconColor(theme),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: _getSpacing()),
             Text(
-              isSelected && !isPreviewMode ? 'Click to upload image' : 'No image selected',
+              isSelected && !isPreviewMode ? 'Click to upload image' : 'Image placeholder',
               style: TextStyle(
-                color: theme.inactiveColor,
-                fontSize: 12,
+                color: _getPlaceholderTextColor(theme),
+                fontSize: _getTextSize(),
+                fontFamily: _getEmailSafeFont(),
               ),
               textAlign: TextAlign.center,
             ),
             if (block.altText.isNotEmpty) ...[
-              const SizedBox(height: 4),
+              SizedBox(height: _getSpacing() / 2),
               Text(
                 'Alt: ${block.altText}',
                 style: TextStyle(
-                  color: theme.inactiveColor,
-                  fontSize: 10,
+                  color: _getPlaceholderTextColor(theme),
+                  fontSize: _getTextSize() - 2,
+                  fontFamily: _getEmailSafeFont(),
                 ),
                 textAlign: TextAlign.center,
+              ),
+            ],
+            // Email-specific fallback text
+            if (templateType == TemplateType.email && block.altText.isNotEmpty) ...[
+              SizedBox(height: _getSpacing()),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.accentColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Fallback: ${block.altText}',
+                  style: TextStyle(
+                    color: theme.accentColor,
+                    fontSize: 10,
+                    fontFamily: _getEmailSafeFont(),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ),
             ],
           ],
@@ -92,84 +162,364 @@ class ImageBlockWidget extends ConsumerWidget {
     );
   }
 
+  Color _getPlaceholderBackgroundColor(FluentThemeData theme) {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return const Color(0xFFF0F2F5); // WhatsApp chat background
+      case TemplateType.email:
+        return const Color(0xFFFAFAFA); // Light gray for email
+      default:
+        return theme.cardColor;
+    }
+  }
+
+  Color _getPlaceholderBorderColor(FluentThemeData theme) {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return const Color(0xFFE4E6EA);
+      case TemplateType.email:
+        return const Color(0xFFDDDDDD);
+      default:
+        return theme.accentColor.withValues(alpha: 0.3);
+    }
+  }
+
+  Color _getPlaceholderIconColor(FluentThemeData theme) {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return const Color(0xFF8696A0);
+      case TemplateType.email:
+        return const Color(0xFF999999);
+      default:
+        return theme.inactiveColor;
+    }
+  }
+
+  Color _getPlaceholderTextColor(FluentThemeData theme) {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return const Color(0xFF667781);
+      case TemplateType.email:
+        return const Color(0xFF666666);
+      default:
+        return theme.inactiveColor;
+    }
+  }
+
+  Size _getPlaceholderSize() {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return Size(
+          block.width > 300 ? 300 : block.width,
+          block.height > 300 ? 300 : block.height,
+        );
+      case TemplateType.email:
+        return Size(
+          block.width > 580 ? 580 : block.width,
+          block.height > 400 ? 400 : block.height,
+        );
+      default:
+        return Size(block.width, block.height);
+    }
+  }
+
+  double _getResponsiveBorderRadius() {
+    final baseRadius = block.borderRadius;
+    
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        // WhatsApp prefers rounded corners but not too much
+        return baseRadius < 8 ? 8 : (baseRadius > 16 ? 16 : baseRadius);
+      case TemplateType.email:
+        // Email clients prefer minimal border radius for compatibility
+        return baseRadius > 6 ? 6 : baseRadius;
+      default:
+        return baseRadius;
+    }
+  }
+
+  double _getIconSize() {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return 24;
+      case TemplateType.email:
+        return 32;
+      default:
+        return 32;
+    }
+  }
+
+  double _getSpacing() {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return 4;
+      case TemplateType.email:
+        return 8;
+      default:
+        return 8;
+    }
+  }
+
+  double _getTextSize() {
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return 12;
+      case TemplateType.email:
+        return 14;
+      default:
+        return 12;
+    }
+  }
+
+  String _getEmailSafeFont() {
+    switch (templateType) {
+      case TemplateType.email:
+        return 'Arial, Helvetica, sans-serif';
+      default:
+        return 'system-ui, -apple-system, sans-serif';
+    }
+  }
+
   Widget _buildImage(FluentThemeData theme, WidgetRef ref, bool isSelected, bool isPreviewMode) {
     return GestureDetector(
       onTap: isSelected && !isPreviewMode ? () => _showImageOptions(ref) : null,
       child: Container(
-        decoration: block.borderWidth > 0
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(block.borderRadius),
-                border: Border.all(
-                  color: isSelected 
-                      ? theme.accentColor
-                      : _parseColor(block.borderColor),
-                  width: isSelected ? 2 : block.borderWidth,
-                ),
-              )
-            : isSelected ? BoxDecoration(
-                borderRadius: BorderRadius.circular(block.borderRadius),
-                border: Border.all(
-                  color: theme.accentColor,
-                  width: 2,
-                ),
-              ) : null,
+        decoration: _getImageDecoration(theme, isSelected),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(block.borderRadius),
+          borderRadius: BorderRadius.circular(_getResponsiveBorderRadius()),
           child: _buildImageWidget(theme),
         ),
       ),
     );
   }
 
+  BoxDecoration _getImageDecoration(FluentThemeData theme, bool isSelected) {
+    if (block.borderWidth > 0) {
+      return BoxDecoration(
+        borderRadius: BorderRadius.circular(_getResponsiveBorderRadius()),
+        border: Border.all(
+          color: isSelected 
+              ? theme.accentColor
+              : _parseColor(block.borderColor),
+          width: isSelected ? 2 : block.borderWidth,
+        ),
+        // Add shadow for email compatibility
+        boxShadow: templateType == TemplateType.email ? [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ] : null,
+      );
+    } else if (isSelected) {
+      return BoxDecoration(
+        borderRadius: BorderRadius.circular(_getResponsiveBorderRadius()),
+        border: Border.all(
+          color: theme.accentColor,
+          width: 2,
+        ),
+      );
+    }
+    return const BoxDecoration();
+  }
+
   Widget _buildImageWidget(FluentThemeData theme) {
+    final imageSize = _getImageSize();
+    
     // Check if it's a local file path or URL
     if (block.imageUrl.startsWith('http://') || block.imageUrl.startsWith('https://')) {
-      return Image.network(
-        block.imageUrl,
-        width: block.isResponsive ? null : block.width,
-        height: block.height,
-        fit: _parseFit(block.fit),
-        errorBuilder: (context, error, stackTrace) => _buildErrorWidget(theme),
-      );
+      return _buildNetworkImage(theme, imageSize);
     } else if (File(block.imageUrl).existsSync()) {
-      return Image.file(
-        File(block.imageUrl),
-        width: block.isResponsive ? null : block.width,
-        height: block.height,
-        fit: _parseFit(block.fit),
-        errorBuilder: (context, error, stackTrace) => _buildErrorWidget(theme),
-      );
+      return _buildFileImage(theme, imageSize);
     } else {
-      return _buildErrorWidget(theme);
+      return _buildErrorWidget(theme, imageSize);
     }
   }
 
-  Widget _buildErrorWidget(FluentThemeData theme) {
+  Widget _buildNetworkImage(FluentThemeData theme, Size imageSize) {
+    return Stack(
+      children: [
+        Image.network(
+          block.imageUrl,
+          width: imageSize.width,
+          height: imageSize.height,
+          fit: _parseFit(block.fit),
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return _buildLoadingWidget(theme, imageSize);
+          },
+          errorBuilder: (context, error, stackTrace) => _buildErrorWidget(theme, imageSize),
+        ),
+        // Email-specific overlay with alt text for accessibility
+        if (templateType == TemplateType.email && block.altText.isNotEmpty)
+          _buildEmailAccessibilityOverlay(theme),
+      ],
+    );
+  }
+
+  Widget _buildFileImage(FluentThemeData theme, Size imageSize) {
+    return Stack(
+      children: [
+        Image.file(
+          File(block.imageUrl),
+          width: imageSize.width,
+          height: imageSize.height,
+          fit: _parseFit(block.fit),
+          errorBuilder: (context, error, stackTrace) => _buildErrorWidget(theme, imageSize),
+        ),
+        // Email-specific overlay with alt text for accessibility
+        if (templateType == TemplateType.email && block.altText.isNotEmpty)
+          _buildEmailAccessibilityOverlay(theme),
+      ],
+    );
+  }
+
+  Widget _buildEmailAccessibilityOverlay(FluentThemeData theme) {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              Colors.black.withValues(alpha: 0.7),
+            ],
+          ),
+        ),
+        child: Text(
+          block.altText,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontFamily: _getEmailSafeFont(),
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Size _getImageSize() {
+    if (block.isResponsive) {
+      switch (templateType) {
+        case TemplateType.whatsapp:
+          return Size(
+            block.width > 300 ? 300 : block.width,
+            _calculateResponsiveHeight(block.width > 300 ? 300 : block.width),
+          );
+        case TemplateType.email:
+          return Size(
+            block.width > 580 ? 580 : block.width,
+            _calculateResponsiveHeight(block.width > 580 ? 580 : block.width),
+          );
+        default:
+          return Size(block.width, block.height);
+      }
+    }
+    return Size(block.width, block.height);
+  }
+
+  double _calculateResponsiveHeight(double width) {
+    // Maintain aspect ratio while respecting platform constraints
+    final aspectRatio = block.width / block.height;
+    final calculatedHeight = width / aspectRatio;
+    
+    switch (templateType) {
+      case TemplateType.whatsapp:
+        return calculatedHeight > 300 ? 300 : calculatedHeight;
+      case TemplateType.email:
+        return calculatedHeight > 400 ? 400 : calculatedHeight;
+      default:
+        return calculatedHeight;
+    }
+  }
+
+  Widget _buildLoadingWidget(FluentThemeData theme, Size size) {
     return Container(
-      width: block.width,
-      height: block.height,
+      width: size.width,
+      height: size.height,
       decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(block.borderRadius),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+        color: _getPlaceholderBackgroundColor(theme),
+        borderRadius: BorderRadius.circular(_getResponsiveBorderRadius()),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const ProgressRing(),
+          SizedBox(height: _getSpacing()),
+          Text(
+            'Loading image...',
+            style: TextStyle(
+              color: _getPlaceholderTextColor(theme),
+              fontSize: _getTextSize(),
+              fontFamily: _getEmailSafeFont(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorWidget(FluentThemeData theme, Size size) {
+    return Container(
+      width: size.width,
+      height: size.height,
+      decoration: BoxDecoration(
+        color: templateType == TemplateType.email 
+            ? const Color(0xFFFFF5F5) 
+            : Colors.red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(_getResponsiveBorderRadius()),
+        border: Border.all(
+          color: templateType == TemplateType.email 
+              ? const Color(0xFFE53E3E) 
+              : Colors.red.withValues(alpha: 0.3),
+        ),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             FluentIcons.error,
-            size: 32,
-            color: Colors.red,
+            size: _getIconSize(),
+            color: templateType == TemplateType.email 
+                ? const Color(0xFFE53E3E) 
+                : Colors.red,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: _getSpacing()),
           Text(
-            'Failed to load image',
+            'Image failed to load',
             style: TextStyle(
-              color: Colors.red,
-              fontSize: 12,
+              color: templateType == TemplateType.email 
+                  ? const Color(0xFFE53E3E) 
+                  : Colors.red,
+              fontSize: _getTextSize(),
+              fontFamily: _getEmailSafeFont(),
             ),
             textAlign: TextAlign.center,
           ),
+          if (block.altText.isNotEmpty) ...[
+            SizedBox(height: _getSpacing() / 2),
+            Text(
+              block.altText,
+              style: TextStyle(
+                color: templateType == TemplateType.email 
+                    ? const Color(0xFF666666) 
+                    : theme.inactiveColor,
+                fontSize: _getTextSize() - 2,
+                fontFamily: _getEmailSafeFont(),
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ],
       ),
     );
@@ -184,6 +534,13 @@ class ImageBlockWidget extends ConsumerWidget {
         decoration: BoxDecoration(
           color: theme.accentColor,
           borderRadius: BorderRadius.circular(4),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -216,17 +573,31 @@ class ImageBlockWidget extends ConsumerWidget {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.image,
         allowMultiple: false,
+        allowedExtensions: templateType == TemplateType.email 
+            ? ['jpg', 'jpeg', 'png', 'gif'] // Email-safe formats
+            : ['jpg', 'jpeg', 'png', 'gif', 'webp'], // WhatsApp supports more formats
       );
 
       if (result != null && result.files.single.path != null) {
         final imagePath = result.files.single.path!;
+        
+        // Validate image size for email compatibility
+        if (templateType == TemplateType.email) {
+          final file = File(imagePath);
+          final fileSize = await file.length();
+          
+          // Warn if image is too large for email (>1MB)
+          if (fileSize > 1024 * 1024) {
+            logger.i('Warning: Image size (${(fileSize / 1024 / 1024).toStringAsFixed(1)}MB) may be too large for email clients');
+          }
+        }
+        
         ref.read(templateEditorProvider.notifier).updateBlock(
           block.id,
           {'imageUrl': imagePath},
         );
       }
     } catch (e) {
-      // Handle error - could show a dialog or toast
       logger.i('Error picking image: $e');
     }
   }
@@ -239,11 +610,6 @@ class ImageBlockWidget extends ConsumerWidget {
   }
 
   void _showImageOptions(WidgetRef ref) {
-    // This could show a context menu with options like:
-    // - Replace image
-    // - Remove image
-    // - Edit alt text
-    // For now, just trigger image picker
     _pickImage(ref);
   }
 
@@ -276,6 +642,8 @@ class ImageBlockWidget extends ConsumerWidget {
         return BoxFit.fitWidth;
       case 'fitHeight':
         return BoxFit.fitHeight;
+      case 'scaleDown':
+        return BoxFit.scaleDown;
       default:
         return BoxFit.cover;
     }

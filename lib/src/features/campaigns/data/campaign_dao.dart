@@ -37,11 +37,16 @@ class CampaignDao {
     DateTime? scheduledAt,
   }) async {
     return await _db.transaction(() async {
+      // Determine initial status
+      final initialStatus = scheduledAt != null && scheduledAt.isAfter(DateTime.now())
+          ? 'scheduled'
+          : 'pending';
+
       // Insert campaign
       final campaignId = await _db.into(_db.campaigns).insert(CampaignsCompanion.insert(
         name: name,
         templateId: templateId,
-        status: 'pending',
+        status: initialStatus, // Use determined status
         scheduledAt: Value(scheduledAt),
       ));
 
@@ -90,6 +95,18 @@ class CampaignDao {
     }
 
     return needingRecovery;
+  }
+
+  // Get due scheduled campaigns
+  Future<List<CampaignModel>> getDueScheduledCampaigns() async {
+    final now = DateTime.now();
+    final query = _db.select(_db.campaigns)
+      ..where((c) => c.status.equals('scheduled') & c.scheduledAt.isSmallerOrEqualValue(now));
+    
+    final rows = await query.get();
+    // For scheduled campaigns, we don't need to fetch clientIds immediately,
+    // as startCampaign will fetch the full details including pending messages.
+    return rows.map((row) => _campaignFromRow(row)).toList();
   }
 
   // Get message logs for a campaign
