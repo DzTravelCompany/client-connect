@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:client_connect/constants.dart';
+import 'package:client_connect/src/features/templates/data/template_block_model.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
@@ -8,12 +9,15 @@ import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:uuid/uuid.dart';
 import '../models/database.dart';
 import '../../features/templates/data/template_model.dart';
 import 'sending_engine.dart';
 
 
 class IsolateSendingService {
+
+  final _uuid = Uuid();
   late AppDatabase _db;
   final _storage = const FlutterSecureStorage();
   final _dio = Dio();
@@ -161,21 +165,61 @@ class IsolateSendingService {
     // Convert database template to TemplateModel for advanced rendering
     final templateModel = TemplateModel.fromDatabase(template);
     
-    // Generate personalized content using template blocks
     String personalizedSubject;
     String personalizedBody;
-    
+    List<Attachment> emailAttachments = [];
+    Map<String, String> localImageCidMap = {};
+
     if (templateModel.hasBlocks) {
-      // Use the template model's advanced rendering system
       personalizedSubject = _personalizeMessage(templateModel.subject ?? templateModel.name, client);
+
+      // Prepare attachments and CIDs for local images
+      for (var block in templateModel.blocks) {
+        if (block.type == TemplateBlockType.image) {
+          final imageBlock = block as ImageBlock;
+          if (imageBlock.imageUrl.isNotEmpty && 
+              !imageBlock.imageUrl.startsWith('http://') && 
+              !imageBlock.imageUrl.startsWith('https://')) {
+            // This is a local file path
+            try {
+              final file = File(imageBlock.imageUrl);
+              if (await file.exists()) {
+                String cid = _uuid.v4();
+                localImageCidMap[imageBlock.imageUrl] = cid;
+                emailAttachments.add(
+                  FileAttachment(file)
+                    ..cid = '<$cid>' // Mailer package expects CIDs with angle brackets
+                    ..location = Location.inline,
+                );
+              } else {
+                logger.w('Local image file not found: ${imageBlock.imageUrl}');
+              }
+            } catch (e) {
+              logger.e('Error processing local image file ${imageBlock.imageUrl}: $e');
+            }
+          }
+        }
+      }
+
+      // Define the image source resolver for email HTML generation
+      String emailImageSrcResolver(String imageUrl) {
+        if (localImageCidMap.containsKey(imageUrl)) {
+          return 'cid:${localImageCidMap[imageUrl]}';
+        }
+        return imageUrl;
+      }
       
-      // Generate HTML email body from template blocks
-      personalizedBody = templateModel.generateBodyFromBlocks(templateModel.templateType);
+      // Generate HTML email body from template blocks using the resolver
+      personalizedBody = templateModel.generateBodyFromBlocks(
+        templateModel.templateType,
+        imageSrcResolver: emailImageSrcResolver,
+      );
       
       // Apply personalization to the rendered HTML
       personalizedBody = _personalizeHtmlContent(personalizedBody, client);
+
     } else {
-      // Fallback to legacy rendering for templates without blocks
+      // Fallback to legacy rendering for templates without blocks (no image handling here)
       personalizedSubject = _personalizeMessage(template.subject ?? '', client);
       personalizedBody = _personalizeMessage(template.body, client);
     }
@@ -194,7 +238,8 @@ class IsolateSendingService {
       ..from = Address(smtpSettings.username, smtpSettings.fromName)
       ..recipients.add(client.email!)
       ..subject = personalizedSubject
-      ..html = personalizedBody; // Use HTML instead of text for rich content
+      ..html = personalizedBody // Use HTML instead of text for rich content
+      ..attachments = emailAttachments; // Add collected attachments
 
     // Send email
     await send(message, smtpServer);

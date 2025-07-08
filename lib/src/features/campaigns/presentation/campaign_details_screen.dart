@@ -2,6 +2,7 @@ import 'package:client_connect/src/core/services/sending_engine.dart';
 import 'package:client_connect/src/features/campaigns/data/campaigns_model.dart';
 import 'package:client_connect/src/features/campaigns/logic/campaign_providers.dart';
 import 'package:client_connect/src/features/campaigns/presentation/campaign_logs_dialog.dart';
+import 'package:client_connect/src/features/campaigns/presentation/retry_management_dialog.dart';
 import 'package:client_connect/src/features/clients/logic/client_providers.dart';
 import 'package:client_connect/src/features/templates/logic/template_providers.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -74,7 +75,7 @@ class CampaignDetailsScreen extends ConsumerWidget {
 
                 // Message statistics
                 messageLogsAsync.when(
-                  data: (logs) => _buildMessageStatistics(context, logs),
+                  data: (logs) => _buildMessageStatistics(context, campaign, logs),
                   loading: () => const Center(child: ProgressRing()),
                   error: (error, stack) => Text('Error loading statistics: $error'),
                 ),
@@ -272,11 +273,13 @@ class CampaignDetailsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMessageStatistics(BuildContext context, List<MessageLogModel> logs) {
+  Widget _buildMessageStatistics(BuildContext context, CampaignModel campaign, List<MessageLogModel> logs) {
     final sent = logs.where((log) => log.isSent).length;
-    final failed = logs.where((log) => log.isFailed).length;
+    final failed = logs.where((log) => log.isFailed || log.isFailedMaxRetries).length;
     final pending = logs.where((log) => log.isPending).length;
+    final retrying = logs.where((log) => log.isRetrying).length;
     final total = logs.length;
+    final withRetries = logs.where((log) => log.retryCount > 0).length;
 
     return Card(
       child: Padding(
@@ -294,6 +297,11 @@ class CampaignDetailsScreen extends ConsumerWidget {
                 Button(
                   onPressed: () => _showMessageLogs(context),
                   child: const Text('View All Messages'),
+                ),
+                const SizedBox(width: 8),
+                Button(
+                  onPressed: () => _showRetryManagement(context, campaign),
+                  child: const Text('Manage Retries'),
                 ),
               ],
             ),
@@ -316,6 +324,24 @@ class CampaignDetailsScreen extends ConsumerWidget {
                 Expanded(
                   child: _buildStatCard('Pending', pending, Colors.orange),
                 ),
+              ],
+            ),
+            
+            const SizedBox(height: 12),
+            
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard('Retrying', retrying, Colors.purple),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildStatCard('With Retries', withRetries, Colors.teal),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Container()), // Empty space
+                const SizedBox(width: 12),
+                Expanded(child: Container()), // Empty space
               ],
             ),
           ],
@@ -541,6 +567,16 @@ class CampaignDetailsScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) => MessageLogsDialog(campaignId: campaignId),
+    );
+  }
+
+  void _showRetryManagement(BuildContext context, CampaignModel campaign) {
+    showDialog(
+      context: context,
+      builder: (context) => RetryManagementDialog(
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+      ),
     );
   }
 

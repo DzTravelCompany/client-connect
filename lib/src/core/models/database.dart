@@ -78,9 +78,9 @@ class ClientTags extends Table {
 // Campaign table for tracking message campaigns
 class Campaigns extends Table {
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get name => text().withLength(min: 1, max: 200)();
+  TextColumn get name => text().withLength(min: 1, max: 255)();
   IntColumn get templateId => integer().references(Templates, #id)();
-  TextColumn get status => text().withLength(min: 1, max: 20)(); // 'pending', 'in_progress', 'completed', 'failed'
+  TextColumn get status => text().withLength(min: 1, max: 50)(); // 'pending', 'in_progress', 'completed', 'failed'
   DateTimeColumn get scheduledAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get completedAt => dateTime().nullable()();
@@ -91,14 +91,46 @@ class MessageLogs extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get campaignId => integer().references(Campaigns, #id)();
   IntColumn get clientId => integer().references(Clients, #id)();
-  TextColumn get type => text().withLength(min: 1, max: 20)(); // 'email' or 'whatsapp'
-  TextColumn get status => text().withLength(min: 1, max: 20)(); // 'pending', 'sent', 'failed'
+  TextColumn get type => text().withLength(min: 1, max: 50)(); // 'email' or 'whatsapp'
+  TextColumn get status => text().withLength(min: 1, max: 50)(); // 'pending', 'sent', 'failed'
   TextColumn get errorMessage => text().nullable()();
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
+  IntColumn get maxRetries => integer().withDefault(const Constant(3))();
+  DateTimeColumn get nextRetryAt => dateTime().nullable()();
+  DateTimeColumn get lastRetryAt => dateTime().nullable()();
+  TextColumn get retryReason => text().nullable()();
   DateTimeColumn get sentAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
-@DriftDatabase(tables: [Clients, Templates, Tags, ClientTags, Campaigns, MessageLogs,
+class RetryConfigurations extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text().withLength(min: 1, max: 255)();
+  IntColumn get maxRetries => integer().withDefault(const Constant(3))();
+  IntColumn get initialDelayMinutes => integer().withDefault(const Constant(5))();
+  IntColumn get maxDelayMinutes => integer().withDefault(const Constant(60))();
+  TextColumn get backoffStrategy => text().withDefault(const Constant('exponential'))(); // 'linear', 'exponential', 'fixed'
+  BoolColumn get retryOnNetworkError => boolean().withDefault(const Constant(true))();
+  BoolColumn get retryOnServerError => boolean().withDefault(const Constant(true))();
+  BoolColumn get retryOnTimeout => boolean().withDefault(const Constant(true))();
+  BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class RetryLogs extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get messageLogId => integer().references(MessageLogs, #id)();
+  IntColumn get retryAttempt => integer()();
+  TextColumn get status => text().withLength(min: 1, max: 50)();
+  TextColumn get errorMessage => text().nullable()();
+  TextColumn get errorType => text().nullable()();
+  DateTimeColumn get attemptedAt => dateTime().withDefault(currentDateAndTime)();
+  IntColumn get delayMinutes => integer().nullable()();
+  TextColumn get triggerType => text().withDefault(const Constant('automatic'))(); // 'automatic', 'manual'
+}
+
+@DriftDatabase(tables: [Clients, Templates, Tags, ClientTags, Campaigns, MessageLogs, RetryConfigurations, RetryLogs,
   TemplateBlocks,
   ContentPlaceholders,])
 class AppDatabase extends _$AppDatabase {

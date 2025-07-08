@@ -99,23 +99,23 @@ class TemplateModel {
   }
 
   // Generate proper HTML/text body from blocks based on template type
-  String _generateBodyFromBlocks() {
+  String _generateBodyFromBlocks({String Function(String imageUrl)? imageSrcResolver}) {
     if (blocks.isEmpty) return '';
     
     switch (templateType) {
       case TemplateType.email:
-        return _generateEmailHtml();
+        return _generateEmailHtml(imageSrcResolver: imageSrcResolver);
       case TemplateType.whatsapp:
         return _generateWhatsAppText();
     }
   }
 
 
-    String generateBodyFromBlocks(TemplateType templateType) {
+    String generateBodyFromBlocks(TemplateType templateType, {String Function(String imageUrl)? imageSrcResolver}) {
 
       switch (templateType) {
         case TemplateType.email:
-          return _generateEmailHtml();
+          return _generateEmailHtml(imageSrcResolver: imageSrcResolver);
         case TemplateType.whatsapp:
           return _generateWhatsAppText();
       }
@@ -123,7 +123,7 @@ class TemplateModel {
 
 
   // Generate HTML for email templates
-  String _generateEmailHtml() {
+  String _generateEmailHtml({String Function(String imageUrl)? imageSrcResolver}) {
     final buffer = StringBuffer();
     
     // Start with email-safe HTML structure
@@ -146,7 +146,7 @@ class TemplateModel {
     buffer.writeln('<div class="container">');
     
     for (final block in blocks) {
-      buffer.writeln(_generateEmailBlockHtml(block));
+      buffer.writeln(_generateEmailBlockHtml(block, imageSrcResolver: imageSrcResolver));
     }
     
     buffer.writeln('</div>');
@@ -157,7 +157,7 @@ class TemplateModel {
   }
 
   // Generate individual block HTML for email
-  String _generateEmailBlockHtml(TemplateBlock block) {
+  String _generateEmailBlockHtml(TemplateBlock block, {String Function(String imageUrl)? imageSrcResolver}) {
     switch (block.type) {
       case TemplateBlockType.text:
         final textBlock = block as TextBlock;
@@ -176,8 +176,9 @@ class TemplateModel {
                          imageBlock.alignment == 'right' ? 'right' : 'left';
         final style = 'max-width: ${imageBlock.width}px; height: auto; border-radius: ${imageBlock.borderRadius}px;';
         final borderStyle = imageBlock.borderWidth > 0 ? 'border: ${imageBlock.borderWidth}px solid ${imageBlock.borderColor};' : '';
-        logger.i('Image URL: ${imageBlock.imageUrl}');
-        return '<div style="text-align: $alignment;"><img src="${imageBlock.imageUrl}" alt="${imageBlock.altText}" style="$style $borderStyle" /></div>';
+        final resolvedImageUrl = imageSrcResolver != null ? imageSrcResolver(imageBlock.imageUrl) : imageBlock.imageUrl;
+        logger.i('Image URL (original): ${imageBlock.imageUrl}, Resolved: $resolvedImageUrl');
+        return '<div style="text-align: $alignment;"><img src="$resolvedImageUrl" alt="${imageBlock.altText}" style="$style $borderStyle" /></div>';
       
       case TemplateBlockType.button:
         final buttonBlock = block as ButtonBlock;

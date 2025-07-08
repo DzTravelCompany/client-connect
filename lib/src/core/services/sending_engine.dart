@@ -5,6 +5,7 @@ import 'package:client_connect/src/core/services/isolate_sending_service.dart';
 import 'package:client_connect/src/features/campaigns/data/campaign_dao.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:client_connect/src/core/services/retry_service.dart';
 
 
 class SendingEngine {
@@ -120,8 +121,33 @@ class SendingEngine {
     final campaignDao = CampaignDao();
     await campaignDao.updateCampaignStatus(campaignId, 'failed');
     
+    // Schedule retries for failed messages
+    try {
+      await RetryService.instance.retryFailedMessagesForCampaign(
+        campaignId,
+        reason: 'Campaign failed: $error',
+      );
+    } catch (e) {
+      logger.e('Failed to schedule retries for campaign $campaignId: $e');
+    }
+    
     _activeIsolates.remove(campaignId);
     debugPrint('Campaign $campaignId failed: $error');
+  }
+
+  // Handle individual message failure with retry logic
+  Future<void> handleMessageFailure(int messageId, String error) async {
+    try {
+      final campaignDao = CampaignDao();
+      await campaignDao.updateMessageStatus(
+        messageId,
+        'failed',
+        errorMessage: error,
+        shouldScheduleRetry: true,
+      );
+    } catch (e) {
+      logger.e('Error handling message failure for $messageId: $e');
+    }
   }
 
   void dispose() {
