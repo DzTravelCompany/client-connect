@@ -1,109 +1,226 @@
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'layouts/three_column_layout.dart';
+import 'layouts/glassmorphism_sidebar.dart';
+import 'providers/layout_providers.dart';
 
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerWidget {
   final Widget child;
-  
+
   const MainShell({super.key, required this.child});
 
   @override
-  State<MainShell> createState() => _MainShellState();
-}
-
-class _MainShellState extends State<MainShell> {
-  int selectedIndex = 0;
-
-  @override
-  void dispose() {
-    // Cancel any active work here if needed
-    super.dispose();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final detailPanelState = ref.watch(detailPanelStateProvider);
+    
+    return FluentApp(
+      home: ThreeColumnLayout(
+        sidebar: const GlassmorphismSidebar(),
+        mainContent: child,
+        detailPanel: _buildDetailPanel(context, ref, detailPanelState),
+        showDetailPanel: detailPanelState.isVisible,
+      ),
+    );
   }
 
-  void _navigateToRoute(int index) {
-    // Check if widget is still mounted before navigation
-    if (!mounted) return;
-    
-    setState(() => selectedIndex = index);
-    
-    // Use a post-frame callback to ensure navigation happens after build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      
-      switch (index) {
-        case 0:
-          context.go('/clients');
-          break;
-        case 1:
-          context.go('/templates');
-          break;
-        case 2:
-          context.go('/campaigns');
-          break;
-        case 3:
-          context.go('/settings');
-          break;
-        case 4:
-          context.go('/analytics');
-          break;
-        case 5:
-          context.go('/tags');
-          break;
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Check if widget is mounted before building
-    if (!mounted) {
-      return const SizedBox.shrink();
+  Widget? _buildDetailPanel(BuildContext context, WidgetRef ref, DetailPanelState state) {
+    if (!state.isVisible || state.selectedItemId == null) {
+      return null;
     }
 
-    return NavigationView(
-      appBar: const NavigationAppBar(
-        title: Text('Client Connect CRM'),
-        automaticallyImplyLeading: false,
-      ),
-      pane: NavigationPane(
-        selected: selectedIndex,
-        onChanged: _navigateToRoute,
-        items: [
-          PaneItem(
-            icon: const Icon(FluentIcons.people),
-            title: const Text('Clients'),
-            body: const SizedBox.shrink(),
+    final theme = FluentTheme.of(context);
+    
+    switch (state.type) {
+      case DetailPanelType.client:
+        return _buildClientDetailPanel(context, theme, state.selectedItemId!);
+      case DetailPanelType.campaign:
+        return _buildCampaignDetailPanel(context, theme, state.selectedItemId!);
+      case DetailPanelType.template:
+        return _buildTemplateDetailPanel(context, theme, state.selectedItemId!);
+      case DetailPanelType.none:
+        return null;
+    }
+  }
+
+  Widget _buildClientDetailPanel(BuildContext context, FluentThemeData theme, String clientId) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Client Details',
+                style: theme.typography.subtitle?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Button(
+                style: ButtonStyle(
+                  padding: WidgetStateProperty.all(const EdgeInsets.all(8)),
+                ),
+                onPressed: () {
+                  // Close detail panel
+                  final container = ProviderScope.containerOf(context);
+                  container.read(detailPanelStateProvider.notifier).hidePanel();
+                },
+                child: const Icon(FluentIcons.chrome_close, size: 12),
+              ),
+            ],
           ),
-          PaneItem(
-            icon: const Icon(FluentIcons.mail),
-            title: const Text('Templates'),
-            body: const SizedBox.shrink(),
-          ),
-          PaneItem(
-            icon: const Icon(FluentIcons.send),
-            title: const Text('Campaigns'),
-            body: const SizedBox.shrink(),
-          ),
-          PaneItem(
-            icon: const Icon(FluentIcons.settings),
-            title: const Text('Settings'),
-            body: const SizedBox.shrink(),
-          ),
-          PaneItem(
-            icon: const Icon(FluentIcons.chart),
-            title: const Text('Analytics'),
-            body: const SizedBox.shrink(),
-          ),
-          PaneItem(
-            icon: const Icon(FluentIcons.tag),
-            title: const Text('Tags'),
-            body: const SizedBox.shrink(),
+          const SizedBox(height: 24),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    FluentIcons.contact_card,
+                    size: 48,
+                    color: theme.resources.textFillColorSecondary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Client Detail Panel',
+                    style: theme.typography.body?.copyWith(
+                      color: theme.resources.textFillColorSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'ID: $clientId',
+                    style: theme.typography.caption?.copyWith(
+                      color: theme.resources.textFillColorTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
-      paneBodyBuilder: (item, child) {
-        // Insert the ShellRoute child into the view:
-        return widget.child;
-      },
+    );
+  }
+
+  Widget _buildCampaignDetailPanel(BuildContext context, FluentThemeData theme, String campaignId) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Campaign Details',
+                style: theme.typography.subtitle?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Button(
+                style: ButtonStyle(
+                  padding: WidgetStateProperty.all(const EdgeInsets.all(8)),
+                ),
+                onPressed: () {
+                  // Close detail panel
+                },
+                child: const Icon(FluentIcons.chrome_close, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    FluentIcons.send,
+                    size: 48,
+                    color: theme.resources.textFillColorSecondary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Campaign Detail Panel',
+                    style: theme.typography.body?.copyWith(
+                      color: theme.resources.textFillColorSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'ID: $campaignId',
+                    style: theme.typography.caption?.copyWith(
+                      color: theme.resources.textFillColorTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTemplateDetailPanel(BuildContext context, FluentThemeData theme, String templateId) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Template Details',
+                style: theme.typography.subtitle?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Button(
+                style: ButtonStyle(
+                  padding: WidgetStateProperty.all(const EdgeInsets.all(8)),
+                ),
+                onPressed: () {
+                  // Close detail panel
+                },
+                child: const Icon(FluentIcons.chrome_close, size: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    FluentIcons.page,
+                    size: 48,
+                    color: theme.resources.textFillColorSecondary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Template Detail Panel',
+                    style: theme.typography.body?.copyWith(
+                      color: theme.resources.textFillColorSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'ID: $templateId',
+                    style: theme.typography.caption?.copyWith(
+                      color: theme.resources.textFillColorTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

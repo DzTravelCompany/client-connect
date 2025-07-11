@@ -1,8 +1,12 @@
 import 'package:client_connect/src/core/models/database.dart';
+import 'package:client_connect/src/core/widgets/paginated_list_view.dart';
+import 'package:client_connect/src/features/campaigns/data/campaigns_model.dart';
+import 'package:client_connect/src/features/campaigns/logic/campaign_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/client_dao.dart';
 import '../data/client_model.dart';
 import 'package:drift/drift.dart';
+
 
 // Client DAO provider
 final clientDaoProvider = Provider<ClientDao>((ref) => ClientDao());
@@ -19,6 +23,16 @@ final searchClientsProvider = StreamProvider.family<List<ClientModel>, String>((
   return dao.searchClients(searchTerm);
 });
 
+final paginatedClientsProvider = Provider.family<Future<PaginatedResult<ClientModel>>, PaginatedClientsParams>((ref, params) {
+  final dao = ref.watch(clientDaoProvider);
+  return dao.getPaginatedClients(
+    page: params.page,
+    limit: params.limit,
+    searchTerm: params.searchTerm,
+  );
+});
+
+
 // Client by ID provider
 final clientByIdProvider = FutureProvider.family<ClientModel?, int>((ref, id) {
   final dao = ref.watch(clientDaoProvider);
@@ -28,6 +42,18 @@ final clientByIdProvider = FutureProvider.family<ClientModel?, int>((ref, id) {
 // Client form state provider
 final clientFormProvider = StateNotifierProvider<ClientFormNotifier, ClientFormState>((ref) {
   return ClientFormNotifier(ref.watch(clientDaoProvider));
+});
+
+// Client companies provider - gets all unique companies from clients
+final clientCompaniesProvider = FutureProvider<List<String>>((ref) async {
+  final dao = ref.watch(clientDaoProvider);
+  return await dao.getAllCompanies();
+});
+
+// Client campaigns provider - gets campaigns for a specific client
+final clientCampaignsProvider = FutureProvider.family<List<CampaignModel>, int>((ref, clientId) async {
+  final dao = ref.watch(campaignDaoProvider);
+  return await dao.getCampaignsByClientId(clientId);
 });
 
 // Client form state
@@ -107,4 +133,29 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> {
   void resetState() {
     state = const ClientFormState();
   }
+}
+
+// Parameters class for paginated clients
+class PaginatedClientsParams {
+  final int page;
+  final int limit;
+  final String? searchTerm;
+
+  const PaginatedClientsParams({
+    required this.page,
+    required this.limit,
+    this.searchTerm,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PaginatedClientsParams &&
+          runtimeType == other.runtimeType &&
+          page == other.page &&
+          limit == other.limit &&
+          searchTerm == other.searchTerm;
+
+  @override
+  int get hashCode => page.hashCode ^ limit.hashCode ^ searchTerm.hashCode;
 }

@@ -39,7 +39,6 @@ class ClientConnectApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final router = ref.watch(appRouterProvider);
     
     return fluent.FluentApp.router(
       title: 'Client Connect CRM',
@@ -51,7 +50,7 @@ class ClientConnectApp extends ConsumerWidget {
         brightness: Brightness.dark,
         accentColor: Colors.blue.toAccentColor(),
       ),
-      routerConfig: router,
+      routerConfig: appRouter,
     );
   }
 }

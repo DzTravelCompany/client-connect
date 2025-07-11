@@ -119,6 +119,37 @@ class CampaignDao {
     return rows.map((row) => _campaignFromRow(row)).toList();
   }
 
+  // Get campaigns for a specific client
+  Future<List<CampaignModel>> getCampaignsByClientId(int clientId) async {
+    // Get all campaigns that have messages for this client
+    final messageQuery = _db.select(_db.messageLogs)
+      ..where((m) => m.clientId.equals(clientId));
+    
+    final messages = await messageQuery.get();
+    final campaignIds = messages.map((m) => m.campaignId).toSet().toList();
+    
+    if (campaignIds.isEmpty) {
+      return [];
+    }
+    
+    // Get the campaigns
+    final campaignQuery = _db.select(_db.campaigns)
+      ..where((c) => c.id.isIn(campaignIds))
+      ..orderBy([(c) => OrderingTerm.desc(c.createdAt)]);
+    
+    final campaigns = await campaignQuery.get();
+    
+    // Convert to models with client IDs
+    List<CampaignModel> result = [];
+    for (final campaign in campaigns) {
+      final campaignMessages = messages.where((m) => m.campaignId == campaign.id).toList();
+      final clientIds = campaignMessages.map((m) => m.clientId).toSet().toList();
+      result.add(_campaignFromRow(campaign, clientIds));
+    }
+    
+    return result;
+  }
+
   // Get message logs for a campaign with retry information
   Stream<List<MessageLogModel>> watchMessageLogs(int campaignId) {
     final query = _db.select(_db.messageLogs)

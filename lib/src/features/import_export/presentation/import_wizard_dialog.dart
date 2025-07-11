@@ -4,6 +4,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../logic/import_export_providers.dart';
 import '../data/import_export_service.dart';
+import 'dart:io';
 
 
 class ImportWizardDialog extends ConsumerStatefulWidget {
@@ -666,12 +667,76 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
   }
 
   void _selectFile() async {
-    final filePath = await ImportExportService.instance.pickImportFile();
-    if (filePath != null) {
-      setState(() {
-        _selectedFilePath = filePath;
-        _selectedFileName = filePath.split('/').last;
-      });
+    try {
+      final filePath = await ImportExportService.instance.pickImportFile();
+      if (filePath != null) {
+        // Validate file size (max 50MB)
+        final file = File(filePath);
+        final fileSize = await file.length();
+        const maxSize = 50 * 1024 * 1024; // 50MB
+        
+        if (fileSize > maxSize) {
+          if (mounted) {
+            displayInfoBar(
+              context,
+              builder: (context, close) => InfoBar(
+                title: const Text('File Too Large'),
+                content: Text('Selected file is ${(fileSize / (1024 * 1024)).toStringAsFixed(1)}MB. Maximum allowed size is 50MB.'),
+                severity: InfoBarSeverity.error,
+                onClose: close,
+              ),
+            );
+          }
+          return;
+        }
+        
+        // Validate file extension
+        final extension = filePath.split('.').last.toLowerCase();
+        if (!['csv', 'json', 'xlsx'].contains(extension)) {
+          if (mounted) {
+            displayInfoBar(
+              context,
+              builder: (context, close) => InfoBar(
+                title: const Text('Unsupported File Type'),
+                content: Text('File type ".$extension" is not supported. Please select a CSV, JSON, or Excel file.'),
+                severity: InfoBarSeverity.error,
+                onClose: close,
+              ),
+            );
+          }
+          return;
+        }
+        
+        setState(() {
+          _selectedFilePath = filePath;
+          _selectedFileName = filePath.split('/').last;
+        });
+        
+        // Show success message
+        if (mounted) {
+          displayInfoBar(
+            context,
+            builder: (context, close) => InfoBar(
+              title: const Text('File Selected'),
+              content: Text('Selected: $_selectedFileName'),
+              severity: InfoBarSeverity.success,
+              onClose: close,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        displayInfoBar(
+          context,
+          builder: (context, close) => InfoBar(
+            title: const Text('File Selection Error'),
+            content: Text('Failed to select file: $e'),
+            severity: InfoBarSeverity.error,
+            onClose: close,
+          ),
+        );
+      }
     }
   }
 

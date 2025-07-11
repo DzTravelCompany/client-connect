@@ -92,6 +92,7 @@ class ImportStateNotifier extends StateNotifier<ImportState> {
     state = state.copyWith(isLoading: true, error: null, result: null, progress: null);
 
     try {
+      // Add timeout to prevent hanging imports
       final result = await _service.importClients(
         filePath: filePath,
         settings: settings,
@@ -100,23 +101,32 @@ class ImportStateNotifier extends StateNotifier<ImportState> {
             state = state.copyWith(progress: progress);
           }
         },
+      ).timeout(
+        const Duration(minutes: 10),
+        onTimeout: () {
+          throw Exception('Import operation timed out after 10 minutes');
+        },
       );
 
-      state = state.copyWith(
-        isLoading: false,
-        result: result,
-        progress: ImportProgress(
-          processedRecords: result.totalRecords,
-          totalRecords: result.totalRecords,
-          currentOperation: 'Import completed',
-          isComplete: true,
-        ),
-      );
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          result: result,
+          progress: ImportProgress(
+            processedRecords: result.totalRecords,
+            totalRecords: result.totalRecords,
+            currentOperation: 'Import completed',
+            isComplete: true,
+          ),
+        );
+      }
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString(),
-      );
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          error: e.toString(),
+        );
+      }
     }
   }
 

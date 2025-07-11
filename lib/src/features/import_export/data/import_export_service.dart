@@ -5,6 +5,7 @@ import 'package:client_connect/src/core/models/database.dart';
 import 'package:client_connect/src/core/services/database_service.dart';
 import 'package:client_connect/src/features/import_export/data/import_export_model.dart';
 import 'package:csv/csv.dart';
+import 'package:drift/native.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -150,6 +151,7 @@ class ImportExportService {
       headers: headers,
       settings: settings,
       sendPort: receivePort.sendPort,
+      databasePath: DatabaseService.instance.dbPath,
     );
 
     // Spawn isolate for background processing
@@ -285,12 +287,14 @@ class ImportIsolateData {
   final List<String> headers;
   final ImportExportSettings settings;
   final SendPort sendPort;
+  final String databasePath;
 
   ImportIsolateData({
     required this.dataRows,
     required this.headers,
     required this.settings,
     required this.sendPort,
+    required this.databasePath,
   });
 }
 
@@ -315,10 +319,11 @@ void _importIsolateEntryPoint(ImportIsolateData data) async {
     int successfulImports = 0;
     int processedRecords = 0;
 
-    // Initialize database connection in isolate
-    final dbService = DatabaseService.instance; 
-    await dbService.initialize();
-    final db = dbService.database;
+    // Initialize database connection in isolate using a copy path from database sevice
+    // Initialize a new AppDatabase instance directly in the isolate
+    final file = File(data.databasePath);
+    final db = AppDatabase(NativeDatabase(file));
+
 
     // Map headers to field indices
     final fieldMap = <String, int>{};
@@ -406,7 +411,7 @@ void _importIsolateEntryPoint(ImportIsolateData data) async {
       processingTime: Duration.zero, // Will be set by caller
     ));
 
-    await dbService.close();
+    await db.close(); // Close the isolate-specific database connection
   } catch (e) {
     data.sendPort.send('ERROR: $e');
   }

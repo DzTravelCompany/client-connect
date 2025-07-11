@@ -13,10 +13,19 @@ class DatabaseService {
   
   AppDatabase? _database;
   AppDatabase get database => _database!;
+  String? _dbPath; // Store path for later access
+
+  String get dbPath {
+    if (_dbPath == null) {
+      throw StateError("Database path is not initialized. Call initialize() first.");
+    }
+    return _dbPath!;
+  }
   
   Future<void> initialize() async {
     final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'client_connect.db'));
+    _dbPath = p.join(dbFolder.path, 'client_connect.db');
+    final file = File(_dbPath!);
     
     _database = AppDatabase(NativeDatabase(file));
 

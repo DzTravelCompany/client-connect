@@ -32,6 +32,12 @@ final tagsForClientProvider = StreamProvider.family<List<TagModel>, int>((ref, c
   return dao.watchTagsForClient(clientId);
 });
 
+// Client tags provider
+final clientTagsProvider = StreamProvider.family<List<TagModel>, int>((ref, clientId) {
+  final tagDao = ref.watch(tagDaoProvider);
+  return tagDao.watchTagsForClient(clientId);
+});
+
 // Clients with tags provider
 final clientsWithTagsProvider = StreamProvider.family<List<ClientWithTags>, List<int>?>((ref, tagIds) {
   final dao = ref.watch(tagDaoProvider);

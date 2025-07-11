@@ -3,6 +3,7 @@ import 'package:flutter/material.dart' show TimeOfDay, showDatePicker, showTimeP
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 import '../../clients/logic/client_providers.dart';
 import '../../templates/logic/template_providers.dart';
 import '../../clients/data/client_model.dart';
@@ -38,40 +39,21 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   String _companyFilter = '';
   bool _showAdvancedFilters = false;
 
-  // Track if we're in the process of disposing to prevent ref usage
-  bool _isDisposing = false;
+  Timer? _debounceTimer;
 
   @override
   void dispose() {
-    _isDisposing = true;
-    
-    // Dispose controllers first
     _campaignNameController.dispose();
     _searchController.dispose();
     
-    // Only reset the campaign creation state if the widget is still mounted
-    // and we haven't started the disposing process
-    try {
-      if (mounted && !_isDisposing) {
-        ref.read(campaignCreationProvider.notifier).resetState();
-      }
-    } catch (e) {
-      // Silently catch any ref-related errors during disposal
-      // This prevents the "Cannot use ref after widget was disposed" error
-    }
+    // Cancel any pending operations
+    _debounceTimer?.cancel();
     
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Early return if disposing to prevent any ref usage
-    if (_isDisposing) {
-      return const ScaffoldPage(
-        content: Center(child: ProgressRing()),
-      );
-    }
-
     final creationState = ref.watch(campaignCreationProvider);
     
     return ScaffoldPage(
@@ -84,7 +66,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                 icon: const Icon(FluentIcons.back),
                 label: const Text('Back'),
                 onPressed: creationState.isLoading ? null : () {
-                  if (mounted && !_isDisposing) {
+                  if (mounted) {
                     setState(() => _currentStep--);
                   }
                 },
@@ -95,7 +77,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                 label: const Text('Next'),
                 onPressed: (_canProceedToNext() && !creationState.isLoading) 
                     ? () {
-                        if (mounted && !_isDisposing) {
+                        if (mounted) {
                           setState(() => _currentStep++);
                         }
                       }
@@ -249,8 +231,6 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   }
 
   Widget _buildEnhancedAudienceSelection() {
-    if (_isDisposing) return const Center(child: ProgressRing());
-    
     final clientsAsync = ref.watch(allClientsProvider);
     final clientsWithTagsAsync = ref.watch(allClientsWithTagsProvider);
     final tagsAsync = ref.watch(allTagsProvider);
@@ -317,19 +297,22 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                       placeholder: 'Search clients by name, email, or company...',
                       prefix: const Icon(FluentIcons.search),
                       onChanged: (value) {
-                        if (mounted && !_isDisposing) {
-                          setState(() {
-                            _searchTerm = value;
-                          });
-                          _applyFilters();
-                        }
+                        _debounceTimer?.cancel();
+                        _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+                          if (mounted) {
+                            setState(() {
+                              _searchTerm = value;
+                            });
+                            _applyFilters();
+                          }
+                        });
                       },
                     ),
                   ),
                   const SizedBox(width: 8),
                   Button(
                     onPressed: () {
-                      if (mounted && !_isDisposing) {
+                      if (mounted) {
                         setState(() {
                           _showAdvancedFilters = !_showAdvancedFilters;
                         });
@@ -373,7 +356,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                               size: TagChipSize.small,
                               isSelected: isSelected,
                               onTap: () {
-                                if (mounted && !_isDisposing) {
+                                if (mounted) {
                                   setState(() {
                                     if (isSelected) {
                                       _selectedTags.removeWhere((t) => t.id == tag.id);
@@ -400,7 +383,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                   children: [
                     Button(
                       onPressed: _hasActiveFilters() ? () {
-                        if (mounted && !_isDisposing) {
+                        if (mounted) {
                           setState(() {
                             _searchController.clear();
                             _searchTerm = '';
@@ -446,7 +429,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                 const Spacer(),
                 Button(
                   onPressed: () {
-                    if (mounted && !_isDisposing) {
+                    if (mounted) {
                       setState(() {
                         _selectedClients = List.from(_filteredClients);
                       });
@@ -457,7 +440,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                 const SizedBox(width: 8),
                 Button(
                   onPressed: () {
-                    if (mounted && !_isDisposing) {
+                    if (mounted) {
                       setState(() {
                         _selectedClients.clear();
                       });
@@ -484,11 +467,8 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
               // Initialize filtered clients if not done
               if (_filteredClients.isEmpty && _searchTerm.isEmpty && _selectedTags.isEmpty) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted || _isDisposing) return;
-                  
-                  // Use clients with tags for initialization to ensure consistency
                   clientsWithTagsAsync.whenData((clientsWithTags) {
-                    if (!mounted || _isDisposing) return;
+                    if (!mounted) return;
                     
                     final clientModels = clientsWithTags.map((clientWithTags) => ClientModel(
                       id: clientWithTags.id,
@@ -504,7 +484,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                       updatedAt: DateTime.now(),
                     )).toList();
                     
-                    if (mounted && !_isDisposing) {
+                    if (mounted) {
                       setState(() {
                         _filteredClients = clientModels;
                       });
@@ -540,7 +520,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                     margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
                     child: GestureDetector(
                       onTap: () {
-                        if (mounted && !_isDisposing) {
+                        if (mounted) {
                           setState(() {
                             if (isSelected) {
                               _selectedClients.removeWhere((c) => c.id == client.id);
@@ -566,7 +546,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                             Checkbox(
                               checked: isSelected,
                               onChanged: (value) {
-                                if (mounted && !_isDisposing) {
+                                if (mounted) {
                                   setState(() {
                                     if (value == true) {
                                       _selectedClients.add(client);
@@ -651,8 +631,6 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   }
 
   Widget _buildTemplateSelection() {
-    if (_isDisposing) return const Center(child: ProgressRing());
-    
     final templatesAsync = ref.watch(templatesProvider);
     
     return Column(
@@ -720,7 +698,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                     margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
                     child: GestureDetector(
                       onTap: () {
-                        if (mounted && !_isDisposing) {
+                        if (mounted) {
                           setState(() => _selectedTemplate = template);
                         }
                       },
@@ -737,7 +715,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                             RadioButton(
                               checked: isSelected,
                               onChanged: (checked) {
-                                if (checked == true && mounted && !_isDisposing) {
+                                if (checked == true && mounted) {
                                   setState(() => _selectedTemplate = template);
                                 }
                               },
@@ -1063,7 +1041,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
                           ),
                           child: Button(
                             onPressed: () {
-                              if (mounted && !_isDisposing) {
+                              if (mounted) {
                                 setState(() {
                                   _scheduledDate = null;
                                   _scheduledTime = null;
@@ -1305,12 +1283,10 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
 
 
   void _applyFilters() {
-    if (!mounted || _isDisposing) return;
-    
     try {
       final clientsWithTagsAsync = ref.read(allClientsWithTagsProvider);
       clientsWithTagsAsync.whenData((clientsWithTags) {
-        if (!mounted || _isDisposing) return;
+        if (!mounted) return;
         
         List<ClientWithTags> filtered = clientsWithTags;
         
@@ -1351,11 +1327,13 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
           updatedAt: DateTime.now(), // Placeholder since ClientWithTags doesn't have these
         )).toList();
         
-        if (mounted && !_isDisposing) {
-          setState(() {
-            _filteredClients = filteredClientModels;
-          });
-        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _filteredClients = filteredClientModels;
+            });
+          }
+        });
       });
     } catch (e) {
       // Silently handle any ref-related errors during filtering
@@ -1428,7 +1406,6 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   }
 
   void _showSchedulePicker() async {
-    if (_isDisposing) return;
     
     final date = await showDatePicker(
       context: context,
@@ -1437,13 +1414,13 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     
-    if (date != null && mounted && !_isDisposing) {
+    if (date != null && mounted) {
       final time = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.now(),
       );
       
-      if (time != null && mounted && !_isDisposing) {
+      if (time != null && mounted) {
         setState(() {
           _scheduledDate = date;
           _scheduledTime = time;
@@ -1471,7 +1448,6 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   }
 
   void _showTemplatePreview(TemplateModel template) {
-    if (_isDisposing) return;
     
     showDialog(
       context: context,
@@ -1486,7 +1462,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
 
   void _createCampaign() async {
     // Check if widget is still mounted and not disposing before starting
-    if (!mounted || _isDisposing) return;
+    if (!mounted) return;
     
     final scheduledDateTime = _scheduledDate != null && _scheduledTime != null
         ? DateTime(
@@ -1509,7 +1485,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
       );
 
       // Check if widget is still mounted and not disposing before showing UI feedback
-      if (!mounted || _isDisposing) return;
+      if (!mounted) return;
 
       if (campaignId != null) {
         // Store the formatted time before using it in the callback to avoid context access
@@ -1518,7 +1494,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
         
         // Use addPostFrameCallback to ensure UI operations happen after current build
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || _isDisposing) return;
+          if (!mounted) return;
           
           displayInfoBar(
             context,
@@ -1536,7 +1512,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
           
           // Navigate to campaigns list after a short delay to ensure InfoBar is shown
           Future.delayed(const Duration(milliseconds: 100), () {
-            if (mounted && !_isDisposing) {
+            if (mounted) {
               context.go('/campaigns');
             }
           });
@@ -1544,9 +1520,9 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
       }
     } catch (e) {
       // Handle any errors that might occur during campaign creation
-      if (mounted && !_isDisposing) {
+      if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || _isDisposing) return;
+          if (!mounted) return;
           
           displayInfoBar(
             context,
