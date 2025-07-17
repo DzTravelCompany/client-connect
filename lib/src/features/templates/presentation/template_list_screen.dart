@@ -109,7 +109,7 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
           CommandBarButton(
             icon: const Icon(FluentIcons.design),
             label: const Text('Advanced Editor'),
-            onPressed: () => context.go('/templates/editor'),
+            onPressed: () => context.pushNamed('editorTemplate'),
           ),
         ],
       ),
@@ -313,14 +313,14 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
                   ),
                   const SizedBox(width: 12),
                   FilledButton(
-                    onPressed: () => context.go('/templates/editor'),
+                    onPressed: () => context.pushNamed('editorTemplate'),
                     child: const Text('Create Template'),
                   ),
                 ],
               ),
             ] else ...[
               FilledButton(
-                onPressed: () => context.go('/templates/editor'),
+                onPressed: () => context.pushNamed('editorTemplate'),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -409,7 +409,7 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
                 ),
                 const SizedBox(width: 12),
                 FilledButton(
-                  onPressed: () => context.go('/templates/editor'),
+                  onPressed: () => context.pushNamed('editorTemplate'),
                   child: const Text('Create New Template'),
                 ),
               ],
@@ -512,7 +512,7 @@ class TemplateCard extends ConsumerWidget {
         ],
       ),
       child: HoverButton(
-        onPressed: () => context.go('/templates/editor/${template.id}'),
+        onPressed: () => context.pushNamed('editeditorTemplate', pathParameters: {'id': template.id.toString()}),
         builder: (context, states) {
           final isHovering = states.contains(WidgetState.hovered);
           
@@ -561,12 +561,12 @@ class TemplateCard extends ConsumerWidget {
                           MenuFlyoutItem(
                             leading: const Icon(FluentIcons.edit),
                             text: const Text('Edit'),
-                            onPressed: () => context.go('/templates/editor/${template.id}'),
+                            onPressed: () => context.pushNamed('editeditorTemplate', pathParameters: {'id': template.id.toString()}),
                           ),
                           MenuFlyoutItem(
                             leading: const Icon(FluentIcons.design),
                             text: const Text('Advanced Editor'),
-                            onPressed: () => context.go('/templates/editor/${template.id}'),
+                            onPressed: () => context.pushNamed('editeditorTemplate', pathParameters: {'id': template.id.toString()}),
                           ),
                           const MenuFlyoutSeparator(),
                           MenuFlyoutItem(

@@ -1,10 +1,12 @@
+import 'package:client_connect/src/features/clients/data/client_activity_model.dart';
+import 'package:client_connect/src/features/clients/logic/client_activity_providers.dart';
 import 'package:client_connect/src/features/tags/data/tag_model.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../logic/client_providers.dart';
 import '../../data/client_model.dart';
 import '../../../tags/logic/tag_providers.dart';
-
+import 'client_activity_timeline.dart';
 
 class ClientDetailsPanel extends ConsumerStatefulWidget {
   final int clientId;
@@ -182,6 +184,13 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
                           _buildNotesSection(client, theme),
                           theme,
                         ),
+                      // Activity Timeline
+                      const SizedBox(height: 24),
+                      _buildSection(
+                        'Activity Timeline',
+                        ClientActivityTimeline(clientId: widget.clientId),
+                        theme,
+                      ),
                     ],
                   ),
                 );
@@ -561,19 +570,62 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
   }
 
   void _saveChanges() async {
-    // TODO: Implement save functionality
-    setState(() {
-      _isEditing = false;
-    });
-    
-    displayInfoBar(
-      context,
-      builder: (context, close) => InfoBar(
-        title: const Text('Changes Saved'),
-        content: const Text('Client information has been updated successfully.'),
-        severity: InfoBarSeverity.success,
-        onClose: close,
-      ),
-    );
+    try {
+      final clientNotifier = ref.read(clientFormProvider.notifier);
+      
+      final updatedClient = ClientModel(
+        id: widget.clientId,
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        email: _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
+        phone: _phoneController.text.trim().isEmpty ? null : _phoneController.text.trim(),
+        company: _companyController.text.trim().isEmpty ? null : _companyController.text.trim(),
+        jobTitle: _jobTitleController.text.trim().isEmpty ? null : _jobTitleController.text.trim(),
+        address: _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
+        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+        createdAt: DateTime.now(), // This should come from the original client
+        updatedAt: DateTime.now(),
+      );
+      
+      await clientNotifier.saveClient(updatedClient);
+      
+      // Add activity log
+      await ref.read(clientActivityNotifierProvider.notifier).addActivity(
+        clientId: widget.clientId,
+        activityType: ClientActivityType.updated,
+        description: 'Client information updated',
+      );
+      
+      setState(() {
+        _isEditing = false;
+      });
+      
+      // Refresh client data
+      ref.invalidate(clientByIdProvider(widget.clientId));
+      
+      if (mounted) {
+        displayInfoBar(
+          context,
+          builder: (context, close) => InfoBar(
+            title: const Text('Changes Saved'),
+            content: const Text('Client information has been updated successfully.'),
+            severity: InfoBarSeverity.success,
+            onClose: close,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        displayInfoBar(
+          context,
+          builder: (context, close) => InfoBar(
+            title: const Text('Error'),
+            content: Text('Failed to save changes: $e'),
+            severity: InfoBarSeverity.error,
+            onClose: close,
+          ),
+        );
+      }
+    }
   }
 }

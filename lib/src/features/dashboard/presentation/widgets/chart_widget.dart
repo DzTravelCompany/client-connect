@@ -29,6 +29,7 @@ class ChartWidget extends StatelessWidget {
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
             Button(
               style: ButtonStyle(

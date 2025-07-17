@@ -18,11 +18,14 @@ class ActivityFeedWidget extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Recent Activity',
-              style: theme.typography.bodyStrong?.copyWith(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+            Flexible(
+              child: Text(
+                'Recent Activity',
+                style: theme.typography.bodyStrong?.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             Button(
@@ -43,14 +46,34 @@ class ActivityFeedWidget extends StatelessWidget {
         const SizedBox(height: 16),
         
         Expanded(
-          child: ListView.separated(
-            itemCount: activities.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final activity = activities[index];
-              return _ActivityTile(activity: activity);
-            },
-          ),
+          child: activities.isEmpty 
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      FluentIcons.timeline,
+                      size: 48,
+                      color: theme.resources.textFillColorTertiary,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No recent activity',
+                      style: theme.typography.body?.copyWith(
+                        color: theme.resources.textFillColorSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : ListView.separated(
+                itemCount: activities.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final activity = activities[index];
+                  return _ActivityTile(activity: activity);
+                },
+              ),
         ),
       ],
     );
@@ -102,6 +125,8 @@ class _ActivityTile extends StatelessWidget {
                   style: theme.typography.body?.copyWith(
                     fontWeight: FontWeight.w500,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -109,10 +134,14 @@ class _ActivityTile extends StatelessWidget {
                   style: theme.typography.caption?.copyWith(
                     color: theme.resources.textFillColorSecondary,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
                 ),
               ],
             ),
           ),
+          
+          const SizedBox(width: 8),
           
           Text(
             activity.timeAgo,

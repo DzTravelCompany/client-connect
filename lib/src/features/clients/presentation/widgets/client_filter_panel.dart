@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../tags/logic/tag_providers.dart';
 import '../../../tags/data/tag_model.dart';
 import '../../logic/client_providers.dart';
+import 'advanced_date_range_picker.dart';
+import 'filter_preset_manager.dart';
 
 class ClientFilterPanel extends ConsumerStatefulWidget {
   final TextEditingController searchController;
@@ -36,6 +38,8 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
   bool _isTagsExpanded = true;
   bool _isCompanyExpanded = true;
   bool _isDateExpanded = false;
+  bool _isPresetExpanded = false;
+  
 
   @override
   Widget build(BuildContext context) {
@@ -86,41 +90,47 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
           const SizedBox(height: 20),
           // Filter Sections
           Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  // Tags Filter
-                  _buildFilterSection(
-                    title: 'Tags',
-                    isExpanded: _isTagsExpanded,
-                    onToggle: () => setState(() => _isTagsExpanded = !_isTagsExpanded),
-                    child: tagsAsync.when(
-                      data: (tags) => _buildTagsFilter(tags),
-                      loading: () => const ProgressRing(),
-                      error: (_, __) => const Text('Error loading tags'),
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    // Tags Filter
+                    _buildFilterSection(
+                      title: 'Tags',
+                      isExpanded: _isTagsExpanded,
+                      onToggle: () => setState(() => _isTagsExpanded = !_isTagsExpanded),
+                      child: tagsAsync.when(
+                        data: (tags) => _buildTagsFilter(tags),
+                        loading: () => const ProgressRing(),
+                        error: (_, __) => const Text('Error loading tags'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Company Filter
-                  _buildFilterSection(
-                    title: 'Company',
-                    isExpanded: _isCompanyExpanded,
-                    onToggle: () => setState(() => _isCompanyExpanded = !_isCompanyExpanded),
-                    child: companiesAsync.when(
-                      data: (companies) => _buildCompanyFilter(companies),
-                      loading: () => const ProgressRing(),
-                      error: (_, __) => const Text('Error loading companies'),
+                    const SizedBox(height: 16),
+                    // Company Filter
+                    _buildFilterSection(
+                      title: 'Company',
+                      isExpanded: _isCompanyExpanded,
+                      onToggle: () => setState(() => _isCompanyExpanded = !_isCompanyExpanded),
+                      child: companiesAsync.when(
+                        data: (companies) => _buildCompanyFilter(companies),
+                        loading: () => const ProgressRing(),
+                        error: (_, __) => const Text('Error loading companies'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Date Range Filter
-                  _buildFilterSection(
-                    title: 'Date Added',
-                    isExpanded: _isDateExpanded,
-                    onToggle: () => setState(() => _isDateExpanded = !_isDateExpanded),
-                    child: _buildDateRangeFilter(),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    // Date Range Filter
+                    _buildFilterSection(
+                      title: 'Date Added',
+                      isExpanded: _isDateExpanded,
+                      onToggle: () => setState(() => _isDateExpanded = !_isDateExpanded),
+                      child: _buildDateRangeFilter(),
+                    ),
+                    const SizedBox(height: 16),
+                    // Filter Presets
+                    _buildFilterPresetsSection(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -340,7 +350,7 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
           children: [
             Expanded(
               child: Button(
-                onPressed: () => _showDateRangePicker(),
+                onPressed: () => _showAdvancedDateRangePicker(),
                 child: Text(
                   widget.dateRange != null
                       ? 'Custom Range'
@@ -373,6 +383,44 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
           ),
         ],
       ],
+    );
+  }
+
+  void _showAdvancedDateRangePicker() {
+    showDialog(
+      context: context,
+      builder: (context) => AdvancedDateRangePicker(
+        initialRange: widget.dateRange,
+        onRangeChanged: (range) => widget.onFilterChanged(dateRange: range),
+      ),
+    );
+  }
+
+  Widget _buildFilterPresetsSection() {
+    return _buildFilterSection(
+      title: 'Saved Presets',
+      isExpanded: _isPresetExpanded,
+      onToggle: () => setState(() {
+        _isPresetExpanded = !_isPresetExpanded;
+      }),
+      child: FilterPresetManager(
+        currentSearchTerm: widget.searchController.text,
+        currentTags: widget.selectedTags,
+        currentCompany: widget.selectedCompany,
+        currentDateRange: widget.dateRange,
+        currentSortBy: 'name', // You'll need to pass this from parent TODO
+        currentSortAscending: true, // You'll need to pass this from parent
+        onPresetSelected: (preset) {
+          // Apply the preset filters
+          widget.searchController.text = preset.searchTerm ?? '';
+          widget.onFilterChanged(
+            tags: preset.tags,
+            company: preset.company,
+            dateRange: preset.dateRange,
+          );
+          widget.onSearchChanged(preset.searchTerm ?? '');
+        },
+      ),
     );
   }
 
@@ -453,19 +501,6 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
           ),
         )),
       ],
-    );
-  }
-
-  void _showDateRangePicker() async {
-    // TODO: Implement custom date range picker
-    displayInfoBar(
-      context,
-      builder: (context, close) => InfoBar(
-        title: const Text('Date Range Picker'),
-        content: const Text('Custom date range picker will be implemented soon.'),
-        severity: InfoBarSeverity.info,
-        onClose: close,
-      ),
     );
   }
 

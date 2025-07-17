@@ -570,6 +570,9 @@ class RetryStatistics {
 
   double get retrySuccessRate => 
     totalRetryAttempts > 0 ? successfulRetries / totalRetryAttempts : 0.0;
+  
+  double get retryFailedRate => 
+    totalRetryAttempts > 0 ? failedRetries / totalRetryAttempts : 0.0;
 }
 
 // Updated RetryLogModel with proper Drift integration

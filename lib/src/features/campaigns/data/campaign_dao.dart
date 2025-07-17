@@ -71,6 +71,14 @@ class CampaignDao {
     });
   }
 
+  Future<bool> updateCampaignNmae(int id, String name) async {
+    final query = _db.update(_db.campaigns)..where((c) => c.id.equals(id));
+    final updatedRows = await query.write(CampaignsCompanion(
+      status: Value(name),
+    ));
+    return updatedRows > 0;
+  }
+
   // Update campaign status
   Future<bool> updateCampaignStatus(int id, String status, {DateTime? completedAt}) async {
     final query = _db.update(_db.campaigns)..where((c) => c.id.equals(id));
@@ -227,6 +235,21 @@ class CampaignDao {
     
     final rows = await query.get();
     return rows.map((row) => _messageLogFromRow(row)).toList();
+  }
+
+  Future<void> resetFailedMessages(int campaignId) async {
+    // Reset failed messages to pending for restart
+    final query = _db.update(_db.messageLogs)
+      ..where((m) => m.campaignId.equals(campaignId) & 
+                     (m.status.equals('failed') | m.status.equals('failed_max_retries')));
+    
+    await query.write(const MessageLogsCompanion(
+      status: Value('pending'),
+      errorMessage: Value(null),
+      retryCount: Value(0),
+      nextRetryAt: Value(null),
+      lastRetryAt: Value(null),
+    ));
   }
 
   // Get campaign statistics including retry information

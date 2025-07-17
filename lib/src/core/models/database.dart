@@ -18,6 +18,33 @@ class Clients extends Table {
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }
 
+@DataClassName('ClientActivity')
+class ClientActivities extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get clientId => integer().references(Clients, #id, onDelete: KeyAction.cascade)();
+  TextColumn get activityType => text()();
+  TextColumn get description => text()();
+  TextColumn get metadata => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+
+// Drift table definition for filter presets
+@DataClassName('ClientFilterPresetData')
+class ClientFilterPresets extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  TextColumn get searchTerm => text().nullable()();
+  TextColumn get tags => text().withDefault(const Constant('[]'))(); // JSON array
+  TextColumn get company => text().nullable()();
+  TextColumn get dateRangeStart => text().nullable()();
+  TextColumn get dateRangeEnd => text().nullable()();
+  TextColumn get sortBy => text().withDefault(const Constant('name'))();
+  BoolColumn get sortAscending => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
 // Template table definition
 class Templates extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -130,7 +157,7 @@ class RetryLogs extends Table {
   TextColumn get triggerType => text().withDefault(const Constant('automatic'))(); // 'automatic', 'manual'
 }
 
-@DriftDatabase(tables: [Clients, Templates, Tags, ClientTags, Campaigns, MessageLogs, RetryConfigurations, RetryLogs,
+@DriftDatabase(tables: [Clients, ClientActivities, ClientFilterPresets, Templates, Tags, ClientTags, Campaigns, MessageLogs, RetryConfigurations, RetryLogs,
   TemplateBlocks,
   ContentPlaceholders,])
 class AppDatabase extends _$AppDatabase {

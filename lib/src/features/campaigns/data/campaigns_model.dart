@@ -1,10 +1,12 @@
 import 'package:client_connect/src/core/models/database.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+
 
 class CampaignModel {
   final int id;
   final String name;
   final int templateId;
-  final String status; // 'pending', 'in_progress', 'completed', 'failed', 'scheduled'
+  final String status; // 'pending', 'queued', 'in_progress', 'paused', 'completed', 'failed', 'cancelled'
   final DateTime? scheduledAt;
   final DateTime createdAt;
   final DateTime? completedAt;
@@ -26,6 +28,91 @@ class CampaignModel {
   bool get isCompleted => status == 'completed';
   bool get isFailed => status == 'failed';
   bool get isScheduled => status == 'scheduled';
+  bool get isQueued => status == 'queued';
+  bool get isPaused => status == 'paused';
+  bool get isCancelled => status == 'cancelled';
+
+  // Progress tracking
+  double get progressPercentage {
+    if (clientIds.isEmpty) return 0.0;
+    // This will be calculated based on message logs in the UI layer
+    return 0.0;
+  }
+
+  DateTime? get estimatedCompletionTime {
+    if (!isInProgress || clientIds.isEmpty) return null;
+    // Estimation logic will be implemented in the service layer
+    return null;
+  }
+
+  // Status display helpers
+  String get statusDisplayName {
+    switch (status) {
+      case 'pending':
+        return 'Pending';
+      case 'queued':
+        return 'Queued';
+      case 'in_progress':
+        return 'Sending';
+      case 'paused':
+        return 'Paused';
+      case 'completed':
+        return 'Completed';
+      case 'failed':
+        return 'Failed';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'scheduled':
+        return 'Scheduled';
+      default:
+        return status.toUpperCase();
+    }
+  }
+
+  Color get statusColor {
+    switch (status) {
+      case 'pending':
+      case 'queued':
+        return Colors.orange;
+      case 'in_progress':
+        return Colors.blue;
+      case 'paused':
+        return Colors.purple;
+      case 'completed':
+        return Colors.green;
+      case 'failed':
+        return Colors.red;
+      case 'cancelled':
+        return Colors.grey;
+      case 'scheduled':
+        return Colors.teal;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData get statusIcon {
+    switch (status) {
+      case 'pending':
+        return FluentIcons.clock;
+      case 'queued':
+        return FluentIcons.list;
+      case 'in_progress':
+        return FluentIcons.send;
+      case 'paused':
+        return FluentIcons.pause;
+      case 'completed':
+        return FluentIcons.completed;
+      case 'failed':
+        return FluentIcons.error;
+      case 'cancelled':
+        return FluentIcons.cancel;
+      case 'scheduled':
+        return FluentIcons.calendar;
+      default:
+        return FluentIcons.help;
+    }
+  }
 
   CampaignModel copyWith({
     int? id,
@@ -59,7 +146,7 @@ class MessageLogModel {
   final String? errorMessage;
   final DateTime? sentAt;
   final DateTime createdAt;
-  
+
   // Retry-related fields
   final int retryCount;
   final int maxRetries;

@@ -89,12 +89,12 @@ class _QuickActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
     
-    return Container(
+    return SizedBox(
       width: double.infinity,
       child: Button(
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.isHovering) {
+            if (states.isHovered) {
               return color.withValues(alpha: 0.1);
             }
             return theme.resources.cardBackgroundFillColorSecondary;

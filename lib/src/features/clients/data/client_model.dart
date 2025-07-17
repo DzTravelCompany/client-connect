@@ -1,3 +1,6 @@
+import 'package:client_connect/src/core/models/database.dart';
+import 'package:drift/drift.dart';
+
 class ClientModel {
   final int id;
   final String firstName;
@@ -25,8 +28,57 @@ class ClientModel {
     required this.updatedAt,
   });
 
-  String get fullName => '$firstName $lastName';
+  // Get full name
+  String get fullName => '$firstName $lastName'.trim();
 
+  // Create from database Client
+  factory ClientModel.fromDatabase(Client client) {
+    return ClientModel(
+      id: client.id,
+      firstName: client.firstName,
+      lastName: client.lastName,
+      email: client.email,
+      phone: client.phone,
+      company: client.company,
+      jobTitle: client.jobTitle,
+      address: client.address,
+      notes: client.notes,
+      createdAt: client.createdAt,
+      updatedAt: client.updatedAt,
+    );
+  }
+
+  // Convert to database Client for insertion
+  ClientsCompanion toCompanion() {
+    return ClientsCompanion.insert(
+      firstName: firstName,
+      lastName: lastName,
+      email: Value(email),
+      phone: Value(phone),
+      company: Value(company),
+      jobTitle: Value(jobTitle),
+      address: Value(address),
+      notes: Value(notes),
+    );
+  }
+
+  // Convert to database Client for update
+  ClientsCompanion toUpdateCompanion() {
+    return ClientsCompanion(
+      id: Value(id),
+      firstName: Value(firstName),
+      lastName: Value(lastName),
+      email: Value(email),
+      phone: Value(phone),
+      company: Value(company),
+      jobTitle: Value(jobTitle),
+      address: Value(address),
+      notes: Value(notes),
+      updatedAt: Value(DateTime.now()),
+    );
+  }
+
+  // Create a copy with updated fields
   ClientModel copyWith({
     int? id,
     String? firstName,
@@ -52,6 +104,41 @@ class ClientModel {
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'ClientModel(id: $id, name: $fullName, email: $email, company: $company)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is ClientModel &&
+        other.id == id &&
+        other.firstName == firstName &&
+        other.lastName == lastName &&
+        other.email == email &&
+        other.phone == phone &&
+        other.company == company &&
+        other.jobTitle == jobTitle &&
+        other.address == address &&
+        other.notes == notes;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(
+      id,
+      firstName,
+      lastName,
+      email,
+      phone,
+      company,
+      jobTitle,
+      address,
+      notes,
     );
   }
 }

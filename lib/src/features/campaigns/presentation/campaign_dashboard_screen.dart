@@ -6,6 +6,11 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/presentation/layouts/three_column_layout.dart';
+import 'widgets/campaign_filter_panel.dart';
+import 'widgets/enhanced_campaign_card.dart';
+import 'widgets/campaign_details_panel.dart';
+
 
 class CampaignDashboardScreen extends ConsumerStatefulWidget {
   const CampaignDashboardScreen({super.key});
@@ -19,92 +24,424 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
 
   @override
   Widget build(BuildContext context) {
-    final campaignsAsync = ref.watch(allCampaignsProvider);
-    final progressAsync = ref.watch(campaignProgressProvider);
 
-    return ScaffoldPage(
-      header: PageHeader(
-        title: const Text('Campaign Dashboard'),
-        commandBar: CommandBar(
-          primaryItems: [
-            CommandBarButton(
-              icon: const Icon(FluentIcons.add),
-              label: const Text('New Campaign'),
-              onPressed: () => context.go('/campaigns/create'),
-            ),
-            CommandBarButton(
-              icon: const Icon(FluentIcons.refresh),
-              label: const Text('Refresh'),
-              onPressed: () => ref.invalidate(allCampaignsProvider),
-            ),
-          ],
-        ),
-      ),
-      content: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // Real-time progress indicator
-            progressAsync.when(
-              data: (progress) => _buildProgressIndicator(progress),
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-
-            // Filter tabs
-            Row(
-              children: [
-                _buildFilterTab('all', 'All Campaigns'),
-                const SizedBox(width: 8),
-                _buildFilterTab('pending', 'Pending'),
-                const SizedBox(width: 8),
-                _buildFilterTab('in_progress', 'In Progress'),
-                const SizedBox(width: 8),
-                _buildFilterTab('completed', 'Completed'),
-                const SizedBox(width: 8),
-                _buildFilterTab('failed', 'Failed'),
+    return Consumer(
+      builder: (context, ref, child){
+        final campaignsAsync = ref.watch(allCampaignsProvider);
+        final progressAsync = ref.watch(campaignProgressProvider);
+        final filterState = ref.watch(campaignFilterStateProvider);
+        final detailPanelState = ref.watch(campaignDetailPanelProvider);
+        return ScaffoldPage(
+          header: PageHeader(
+            title: const Text('Campaign Dashboard'),
+            commandBar: CommandBar(
+              primaryItems: [
+                CommandBarButton(
+                  icon: const Icon(FluentIcons.add),
+                  label: const Text('New Campaign'),
+                  onPressed: () => context.pushNamed('createCampaigns'),
+                ),
+                CommandBarButton(
+                  icon: const Icon(FluentIcons.analytics_report),
+                  label: const Text('Analytics'),
+                  onPressed: () => context.pushNamed('seeAnalyticsCampaigns'),
+                ),
+                CommandBarButton(
+                  icon: const Icon(FluentIcons.refresh),
+                  label: const Text('Refresh'),
+                  onPressed: () => ref.invalidate(allCampaignsProvider),
+                ),
               ],
             ),
-            const SizedBox(height: 16),
+          ),
+          content: ThreeColumnLayout(
+            sidebar: const CampaignFilterPanel(),
+            mainContent: _buildMainContent(context, ref, campaignsAsync, progressAsync, filterState),
+            detailPanel: detailPanelState.isVisible 
+                ? _buildDetailPanel(context, ref, detailPanelState)
+                : null,
+            showDetailPanel: detailPanelState.isVisible,
+          ),
+        );
+      }
+    );
+  }
 
-            // Campaign list
-            Expanded(
-              child: campaignsAsync.when(
-                data: (campaigns) {
-                  final filteredCampaigns = _filterCampaigns(campaigns);
-                  
-                  if (filteredCampaigns.isEmpty) {
-                    return _buildEmptyState();
-                  }
+  Widget _buildMainContent(
+    BuildContext context, 
+    WidgetRef ref, 
+    AsyncValue<List<CampaignModel>> campaignsAsync,
+    AsyncValue<CampaignProgress> progressAsync,
+    CampaignFilterState filterState,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          // Campaign health indicators
+          _buildHealthIndicators(ref),
 
-                  return ListView.builder(
-                    itemCount: filteredCampaigns.length,
-                    itemBuilder: (context, index) {
-                      final campaign = filteredCampaigns[index];
-                      return _buildCampaignCard(campaign);
-                    },
-                  );
-                },
-                loading: () => const Center(child: ProgressRing()),
-                error: (error, stack) => Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(FluentIcons.error, size: 48, color: Colors.red),
-                      const SizedBox(height: 16),
-                      Text('Error loading campaigns: $error'),
-                      const SizedBox(height: 16),
-                      Button(
-                        onPressed: () => ref.invalidate(allCampaignsProvider),
-                        child: const Text('Retry'),
-                      ),
-                    ],
+          // Real-time progress indicator
+          progressAsync.when(
+            data: (progress) => _buildProgressIndicator(progress),
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+
+          // Campaign cards grid
+          Expanded(
+            child: campaignsAsync.when(
+              data: (campaigns) {
+                final filteredCampaigns = _filterCampaigns(campaigns, filterState);
+                
+                if (filteredCampaigns.isEmpty) {
+                  return _buildEmptyState(filterState.hasActiveFilters);
+                }
+
+                return GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 1.5,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
                   ),
+                  itemCount: filteredCampaigns.length,
+                  itemBuilder: (context, index) {
+                    final campaign = filteredCampaigns[index];
+                    return _buildEnhancedCampaignCard(context, ref, campaign);
+                  },
+                );
+              },
+              loading: () => const Center(child: ProgressRing()),
+              error: (error, stack) => Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(FluentIcons.error, size: 48, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text('Error loading campaigns: $error'),
+                    const SizedBox(height: 16),
+                    Button(
+                      onPressed: () => ref.invalidate(allCampaignsProvider),
+                      child: const Text('Retry'),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHealthIndicators(WidgetRef ref) {
+    final healthAsync = ref.watch(campaignHealthProvider);
+    
+    return healthAsync.when(
+      data: (healthIndicators) {
+        if (healthIndicators.isEmpty) return const SizedBox.shrink();
+        
+        final criticalCampaigns = healthIndicators.where((h) => h.isCritical).length;
+        final warningCampaigns = healthIndicators.where((h) => h.hasWarnings).length;
+        final healthyCampaigns = healthIndicators.where((h) => h.isHealthy).length;
+        
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                criticalCampaigns > 0 
+                    ? Colors.red.withValues(alpha: 0.1)
+                    : warningCampaigns > 0
+                        ? Colors.orange.withValues(alpha: 0.1)
+                        : Colors.green.withValues(alpha: 0.1),
+                Colors.transparent,
+              ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: criticalCampaigns > 0 
+                  ? Colors.red.withValues(alpha: 0.3)
+                  : warningCampaigns > 0
+                      ? Colors.orange.withValues(alpha: 0.3)
+                      : Colors.green.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    FluentIcons.health,
+                    size: 20,
+                    color: criticalCampaigns > 0 
+                        ? Colors.red
+                        : warningCampaigns > 0
+                            ? Colors.orange
+                            : Colors.green,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Campaign Health Overview',
+                    style: FluentTheme.of(context).typography.subtitle?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${healthIndicators.length} active campaigns',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 12),
+              
+              Row(
+                children: [
+                  _buildHealthStat('Healthy', healthyCampaigns, Colors.green),
+                  const SizedBox(width: 16),
+                  _buildHealthStat('Warning', warningCampaigns, Colors.orange),
+                  const SizedBox(width: 16),
+                  _buildHealthStat('Critical', criticalCampaigns, Colors.red),
+                  const Spacer(),
+                  if (criticalCampaigns > 0 || warningCampaigns > 0)
+                    Button(
+                      onPressed: () => _showHealthDetails(healthIndicators),
+                      child: const Text('View Details'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildHealthStat(String label, int count, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
         ),
+        const SizedBox(width: 4),
+        Text(
+          '$label: $count',
+          style: const TextStyle(fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  void _showHealthDetails(List<CampaignHealthIndicator> healthIndicators) {
+    showDialog(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: const Text('Campaign Health Details'),
+        content: Container(
+          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 400),
+          child: ListView.builder(
+            itemCount: healthIndicators.length,
+            itemBuilder: (context, index) {
+              final indicator = healthIndicators[index];
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: indicator.isCritical 
+                                  ? Colors.red
+                                  : indicator.hasWarnings
+                                      ? Colors.orange
+                                      : Colors.green,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              indicator.campaignName,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Text(
+                            '${(indicator.healthScore * 100).toStringAsFixed(0)}%',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: indicator.isCritical 
+                                  ? Colors.red
+                                  : indicator.hasWarnings
+                                      ? Colors.orange
+                                      : Colors.green,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (indicator.issues.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        ...indicator.issues.map((issue) => Padding(
+                          padding: const EdgeInsets.only(left: 20, bottom: 2),
+                          child: Row(
+                            children: [
+                              Icon(FluentIcons.warning, size: 12, color: Colors.red),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  issue,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          Button(
+            child: const Text('Close'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailPanel(BuildContext context, WidgetRef ref, CampaignDetailPanelState panelState) {
+    if (panelState.selectedCampaignId == null) return const SizedBox.shrink();
+    
+    return CampaignDetailsPanel(
+      campaignId: panelState.selectedCampaignId!,
+      activeTab: panelState.activeTab,
+      onClose: () => ref.read(campaignDetailPanelProvider.notifier).hidePanel(),
+      onTabChanged: (tab) => ref.read(campaignDetailPanelProvider.notifier).setActiveTab(tab),
+    );
+  }
+
+  Widget _buildEnhancedCampaignCard(BuildContext context, WidgetRef ref, CampaignModel campaign) {
+    return EnhancedCampaignCard(
+      campaign: campaign,
+      onTap: () {
+        ref.read(campaignDetailPanelProvider.notifier).showCampaignDetails(campaign.id);
+      },
+      onStart: campaign.isPending ? () => _startCampaign(ref, campaign.id) : null,
+      onPause: campaign.isInProgress ? () => _pauseCampaign(ref, campaign.id) : null,
+      onViewDetails: () => context.go('/campaigns/${campaign.id}'),
+    );
+  }
+
+  List<CampaignModel> _filterCampaigns(List<CampaignModel> campaigns, CampaignFilterState filterState) {
+    var filtered = campaigns.where((campaign) {
+      // Apply search filter
+      if (filterState.searchTerm.isNotEmpty) {
+        final searchLower = filterState.searchTerm.toLowerCase();
+        if (!campaign.name.toLowerCase().contains(searchLower)) {
+          return false;
+        }
+      }
+      
+      // Apply status filters
+      if (filterState.statusFilters.isNotEmpty) {
+        if (!filterState.statusFilters.contains(campaign.status)) {
+          return false;
+        }
+      }
+      
+      // Apply date range filters
+      if (filterState.startDate != null) {
+        if (campaign.createdAt.isBefore(filterState.startDate!)) {
+          return false;
+        }
+      }
+      
+      if (filterState.endDate != null) {
+        if (campaign.createdAt.isAfter(filterState.endDate!.add(const Duration(days: 1)))) {
+          return false;
+        }
+      }
+      
+      return true;
+    }).toList();
+
+    // Apply sorting
+    filtered.sort((a, b) {
+      int comparison;
+      switch (filterState.sortBy) {
+        case 'name':
+          comparison = a.name.compareTo(b.name);
+          break;
+        case 'status':
+          comparison = a.status.compareTo(b.status);
+          break;
+        case 'scheduledAt':
+          final aDate = a.scheduledAt ?? DateTime(1970);
+          final bDate = b.scheduledAt ?? DateTime(1970);
+          comparison = aDate.compareTo(bDate);
+          break;
+        case 'createdAt':
+        default:
+          comparison = a.createdAt.compareTo(b.createdAt);
+          break;
+      }
+      return filterState.sortAscending ? comparison : -comparison;
+    });
+
+    return filtered;
+  }
+
+  Widget _buildEmptyState(bool hasFilters) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(FluentIcons.send, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text(
+            hasFilters ? 'No campaigns match your filters' : 'No campaigns yet',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            hasFilters 
+                ? 'Try adjusting your search criteria'
+                : 'Create your first campaign to get started',
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: () => context.go('/campaigns/create'),
+            child: const Text('Create Campaign'),
+          ),
+        ],
       ),
     );
   }
@@ -188,6 +525,8 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
     );
   }
 
+  // TODO see this function later
+  // ignore: unused_element
   Widget _buildFilterTab(String value, String label) {
     final isSelected = _selectedFilter == value;
     return GestureDetector(
@@ -212,6 +551,8 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
     );
   }
 
+  // TODO see this function later
+  // ignore: unused_element
   Widget _buildCampaignCard(CampaignModel campaign) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -412,55 +753,7 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
     );
   }
 
-  Widget _buildMessageStat(String label, int count, Color color) {
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          '$label: $count',
-          style: const TextStyle(fontSize: 12),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(FluentIcons.send, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          Text(
-            _selectedFilter == 'all' 
-                ? 'No campaigns yet'
-                : 'No ${_selectedFilter.replaceAll('_', ' ')} campaigns',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          const Text('Create your first campaign to get started'),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: () => context.go('/campaigns/create'),
-            child: const Text('Create Campaign'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<CampaignModel> _filterCampaigns(List<CampaignModel> campaigns) {
-    if (_selectedFilter == 'all') return campaigns;
-    return campaigns.where((campaign) => campaign.status == _selectedFilter).toList();
-  }
+  
 
   void _showCampaignMenu(CampaignModel campaign) {
     showDialog(
@@ -476,7 +769,7 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
                 title: const Text('Start Campaign'),
                 onPressed: () {
                   Navigator.of(context).pop();
-                  _startCampaign(campaign.id);
+                  _startCampaign(ref, campaign.id);
                 },
               ),
             if (campaign.isInProgress)
@@ -485,7 +778,7 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
                 title: const Text('Stop Campaign'),
                 onPressed: () {
                   Navigator.of(context).pop();
-                  _stopCampaign(campaign.id);
+                  _pauseCampaign(ref, campaign.id);
                 },
               ),
             ListTile(
@@ -525,7 +818,27 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
     );
   }
 
-  void _startCampaign(int campaignId) async {
+  Widget _buildMessageStat(String label, int count, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '$label: $count',
+          style: const TextStyle(fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  void _startCampaign(WidgetRef ref, int campaignId) async {
     try {
       final controller = ref.read(campaignControlProvider);
       await controller.startCampaign(campaignId);
@@ -556,7 +869,7 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
     }
   }
 
-  void _stopCampaign(int campaignId) async {
+  void _pauseCampaign(WidgetRef ref, int campaignId) async {
     try {
       final controller = ref.read(campaignControlProvider);
       await controller.stopCampaign(campaignId);
@@ -565,8 +878,8 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
         displayInfoBar(
           context,
           builder: (context, close) => InfoBar(
-            title: const Text('Campaign Stopped'),
-            content: const Text('The campaign has been stopped.'),
+            title: const Text('Campaign Paused'),
+            content: const Text('The campaign has been paused.'),
             severity: InfoBarSeverity.warning,
             onClose: close,
           ),
@@ -578,7 +891,7 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
           context,
           builder: (context, close) => InfoBar(
             title: const Text('Error'),
-            content: Text('Failed to stop campaign: $e'),
+            content: Text('Failed to pause campaign: $e'),
             severity: InfoBarSeverity.error,
             onClose: close,
           ),

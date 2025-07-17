@@ -1,10 +1,14 @@
+import 'package:client_connect/src/features/clients/logic/client_providers.dart';
+import 'package:client_connect/src/features/clients/presentation/widgets/quick_edit_client_dialog.dart';
 import 'package:client_connect/src/features/tags/data/tag_model.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/client_model.dart';
 import '../../../tags/logic/tag_providers.dart';
+import 'package:go_router/go_router.dart';
 
-class EnhancedClientCard extends ConsumerWidget {
+// 1. Change to ConsumerStatefulWidget
+class EnhancedClientCard extends ConsumerStatefulWidget {
   final ClientModel client;
   final bool isSelected;
   final VoidCallback onTap;
@@ -21,21 +25,42 @@ class EnhancedClientCard extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EnhancedClientCard> createState() => _EnhancedClientCardState();
+}
+
+class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
+  // 2. Add FlyoutController
+  late final FlyoutController _moreActionsFlyoutController;
+
+  @override
+  void initState() {
+    super.initState();
+    _moreActionsFlyoutController = FlyoutController();
+  }
+
+  @override
+  void dispose() {
+    _moreActionsFlyoutController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 6. Access widget properties via widget.client, widget.isSelected, etc.
     final theme = FluentTheme.of(context);
-    final clientTagsAsync = ref.watch(clientTagsProvider(client.id));
+    final clientTagsAsync = ref.watch(clientTagsProvider(widget.client.id));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Card(
-        backgroundColor: isSelected 
+        backgroundColor: widget.isSelected
             ? theme.accentColor.withValues(alpha: 0.1)
             : theme.cardColor,
-        borderColor: isSelected 
+        borderColor: widget.isSelected
             ? theme.accentColor.withValues(alpha: 0.3)
             : theme.resources.dividerStrokeColorDefault.withValues(alpha: 0.3),
         child: GestureDetector(
-          onTap: onTap,
+          onTap: widget.onTap,
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
             child: AnimatedContainer(
@@ -52,10 +77,11 @@ class EnhancedClientCard extends ConsumerWidget {
                   Row(
                     children: [
                       // Selection checkbox
-                      if (showSelection) ...[
+                      if (widget.showSelection) ...[
                         Checkbox(
-                          checked: isSelected,
-                          onChanged: (checked) => onSelectionChanged(checked ?? false),
+                          checked: widget.isSelected,
+                          onChanged: (checked) =>
+                              widget.onSelectionChanged(checked ?? false),
                         ),
                         const SizedBox(width: 12),
                       ],
@@ -73,7 +99,7 @@ class EnhancedClientCard extends ConsumerWidget {
                         ),
                         child: Center(
                           child: Text(
-                            _getInitials(client.fullName),
+                            _getInitials(widget.client.fullName),
                             style: TextStyle(
                               color: theme.accentColor,
                               fontWeight: FontWeight.w600,
@@ -89,24 +115,26 @@ class EnhancedClientCard extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              client.fullName,
+                              widget.client.fullName,
                               style: theme.typography.bodyStrong?.copyWith(
                                 fontSize: 16,
                               ),
                             ),
-                            if (client.jobTitle != null && client.company != null) ...[
+                            // Typo fix: client.client.company -> client.company
+                            if (widget.client.jobTitle != null &&
+                                widget.client.company != null) ...[
                               const SizedBox(height: 2),
                               Text(
-                                '${client.jobTitle} at ${client.company}',
+                                '${widget.client.jobTitle} at ${widget.client.company}',
                                 style: theme.typography.body?.copyWith(
                                   color: theme.resources.textFillColorSecondary,
                                   fontSize: 14,
                                 ),
                               ),
-                            ] else if (client.company != null) ...[
+                            ] else if (widget.client.company != null) ...[
                               const SizedBox(height: 2),
                               Text(
-                                client.company!,
+                                widget.client.company!,
                                 style: theme.typography.body?.copyWith(
                                   color: theme.resources.textFillColorSecondary,
                                   fontSize: 14,
@@ -121,7 +149,7 @@ class EnhancedClientCard extends ConsumerWidget {
                         width: 8,
                         height: 8,
                         decoration: BoxDecoration(
-                          color: _getStatusColor(client),
+                          color: _getStatusColor(widget.client),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -131,21 +159,22 @@ class EnhancedClientCard extends ConsumerWidget {
                   // Contact information
                   Row(
                     children: [
-                      if (client.email != null) ...[
+                      if (widget.client.email != null) ...[
                         Expanded(
                           child: _buildContactInfo(
                             FluentIcons.mail,
-                            client.email!,
+                            widget.client.email!,
                             theme,
                           ),
                         ),
                       ],
-                      if (client.phone != null) ...[
-                        if (client.email != null) const SizedBox(width: 16),
+                      if (widget.client.phone != null) ...[
+                        if (widget.client.email != null)
+                          const SizedBox(width: 16),
                         Expanded(
                           child: _buildContactInfo(
                             FluentIcons.phone,
-                            client.phone!,
+                            widget.client.phone!,
                             theme,
                           ),
                         ),
@@ -169,14 +198,17 @@ class EnhancedClientCard extends ConsumerWidget {
                   // Footer with last updated and quick actions
                   Row(
                     children: [
-                      Text(
-                        'Updated ${_formatRelativeDate(client.updatedAt)}',
-                        style: theme.typography.caption?.copyWith(
-                          color: theme.resources.textFillColorTertiary,
+                      Flexible(
+                        child: Text(
+                          'Updated ${_formatRelativeDate(widget.client.updatedAt)}',
+                          style: theme.typography.caption?.copyWith(
+                            color: theme.resources.textFillColorTertiary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const Spacer(),
-                      _buildQuickActions(theme),
+                      const SizedBox(width: 8),
+                      _buildQuickActions(theme, context),
                     ],
                   ),
                 ],
@@ -218,24 +250,27 @@ class EnhancedClientCard extends ConsumerWidget {
           child: Wrap(
             spacing: 6,
             runSpacing: 4,
-            children: tags.take(3).map((tag) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: theme.accentColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: theme.accentColor.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Text(
-                tag.name,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.accentColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            )).toList(),
+            children: tags
+                .take(3)
+                .map((tag) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: theme.accentColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.accentColor.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        tag.name,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: theme.accentColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ))
+                .toList(),
           ),
         ),
         if (tags.length > 3)
@@ -249,53 +284,222 @@ class EnhancedClientCard extends ConsumerWidget {
     );
   }
 
-  Widget _buildQuickActions(FluentThemeData theme) {
+  Widget _buildQuickActions(FluentThemeData theme, BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Button(
-          style: ButtonStyle(
-            padding: WidgetStateProperty.all(const EdgeInsets.all(8)),
-            backgroundColor: WidgetStateProperty.all(Colors.transparent),
-          ),
-          onPressed: () {
-            // TODO: Quick edit action
-          },
-          child: Icon(
-            FluentIcons.edit,
-            size: 16,
-            color: theme.resources.textFillColorSecondary,
-          ),
-        ),
-        Button(
-          style: ButtonStyle(
-            padding: WidgetStateProperty.all(const EdgeInsets.all(8)),
-            backgroundColor: WidgetStateProperty.all(Colors.transparent),
-          ),
-          onPressed: () {
-            // TODO: Quick email action
-          },
-          child: Icon(
-            FluentIcons.mail,
-            size: 16,
-            color: theme.resources.textFillColorSecondary,
+        SizedBox(
+          width: 24,
+          height: 24,
+          child: Button(
+            style: ButtonStyle(
+              padding: WidgetStateProperty.all(const EdgeInsets.all(4)),
+              backgroundColor: WidgetStateProperty.all(Colors.transparent),
+            ),
+            onPressed: () => _showQuickEditDialog(context),
+            child: Icon(
+              FluentIcons.edit,
+              size: 12,
+              color: theme.resources.textFillColorSecondary,
+            ),
           ),
         ),
-        Button(
-          style: ButtonStyle(
-            padding: WidgetStateProperty.all(const EdgeInsets.all(8)),
-            backgroundColor: WidgetStateProperty.all(Colors.transparent),
+        const SizedBox(width: 2),
+        SizedBox(
+          width: 24,
+          height: 24,
+          child: Button(
+            style: ButtonStyle(
+              padding: WidgetStateProperty.all(const EdgeInsets.all(4)),
+              backgroundColor: WidgetStateProperty.all(Colors.transparent),
+            ),
+            onPressed: () => _launchEmail(context),
+            child: Icon(
+              FluentIcons.mail,
+              size: 12,
+              color: theme.resources.textFillColorSecondary,
+            ),
           ),
-          onPressed: () {
-            // TODO: More actions menu
-          },
-          child: Icon(
-            FluentIcons.more,
-            size: 16,
-            color: theme.resources.textFillColorSecondary,
+        ),
+        const SizedBox(width: 2),
+        // 3. Wrap the button in a FlyoutTarget
+        FlyoutTarget(
+          controller: _moreActionsFlyoutController,
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: Button(
+              style: ButtonStyle(
+                padding: WidgetStateProperty.all(const EdgeInsets.all(4)),
+                backgroundColor: WidgetStateProperty.all(Colors.transparent),
+              ),
+              onPressed: () {
+                // 4. Use showFlyout and MenuFlyout
+                _moreActionsFlyoutController.showFlyout(
+                  builder: (context) {
+                    return MenuFlyout(
+                      items: [
+                        MenuFlyoutItem(
+                          leading: const Icon(FluentIcons.copy, size: 16),
+                          text: const Text('Edit Client'),
+                          onPressed: () {
+                            _moreActionsFlyoutController.close(); // Close the flyout
+                            _editClient(context);
+                          },
+                        ),
+                        MenuFlyoutItem(
+                          leading: Icon(FluentIcons.delete,
+                              size: 16, color: Colors.red),
+                          text: Text('Delete Client',
+                              style: TextStyle(color: Colors.red)),
+                          onPressed: () {
+                            _moreActionsFlyoutController.close(); // Close the flyout
+                            _confirmDeleteClient(context);
+                          },
+                        ),
+                        MenuFlyoutItem(
+                          leading: const Icon(FluentIcons.download, size: 16),
+                          text: const Text('Export Data'),
+                          onPressed: () {
+                            _moreActionsFlyoutController.close(); // Close the flyout
+                            _exportClientData(context);
+                          },
+                        ),
+                        MenuFlyoutItem(
+                          leading: const Icon(FluentIcons.bullseye_target, size: 16),
+                          text: const Text('View Campaigns'),
+                          onPressed: () {
+                            _moreActionsFlyoutController.close(); // Close the flyout
+                            _viewClientCampaigns(context);
+                          },
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+              child: Icon(
+                FluentIcons.more,
+                size: 12,
+                color: theme.resources.textFillColorSecondary,
+              ),
+            ),
           ),
         ),
       ],
+    );
+  }
+
+  void _showQuickEditDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => QuickEditClientDialog(client: widget.client),
+    );
+  }
+
+  void _launchEmail(BuildContext context) async {
+    if (widget.client.email == null || widget.client.email!.isEmpty) {
+      _showErrorMessage(context, 'No email address available for this client');
+      return;
+    }
+    _showInfoMessage(context, 'Export functionality coming soon');
+  }
+
+  void _editClient(BuildContext context) {
+
+    context.pushNamed('editClient', pathParameters: {'id': widget.client.id.toString()});
+  }
+
+  void _confirmDeleteClient(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: const Text('Delete Client'), // 7. Added const
+        // 6. Use widget.client
+        content: Text(
+            'Are you sure you want to delete ${widget.client.fullName}? This action cannot be undone.'),
+        actions: [
+          Button(
+            child: const Text('Cancel'), // 7. Added const
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          FilledButton(
+            child: const Text('Delete'), // 7. Added const
+            onPressed: () {
+              Navigator.of(context).pop();
+              _deleteClient(context);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteClient(BuildContext context) async {
+    try {
+      final dao = ref.read(clientDaoProvider);
+      await dao.deleteClient(widget.client.id);
+      if(context.mounted){
+        _showSuccessMessage(context, 'Client deleted successfully'); 
+      }
+    } catch (e) {
+      if(context.mounted){
+        _showErrorMessage(context, 'Failed to delete client');
+      }
+    }
+  }
+
+  void _exportClientData(BuildContext context) {
+    _showInfoMessage(context, 'Export functionality coming soon');
+  }
+
+  void _viewClientCampaigns(BuildContext context) {
+    // 6. Use widget.client
+    context.go('/campaigns', extra: {'clientId': widget.client.id});
+  }
+
+  void _showErrorMessage(BuildContext context, String message) {
+    displayInfoBar(
+      context,
+      builder: (context, close) => InfoBar(
+        title: const Text('Error'), // 7. Added const
+        content: Text(message),
+        severity: InfoBarSeverity.error,
+        action: IconButton(
+          icon: const Icon(FluentIcons.clear), // 7. Added const
+          onPressed: close,
+        ),
+      ),
+    );
+  }
+
+  void _showSuccessMessage(BuildContext context, String message) {
+    displayInfoBar(
+      context,
+      builder: (context, close) => InfoBar(
+        title: const Text('Success'), // 7. Added const
+        content: Text(message),
+        severity: InfoBarSeverity.success,
+        action: IconButton(
+          icon: const Icon(FluentIcons.clear), // 7. Added const
+          onPressed: close,
+        ),
+      ),
+    );
+  }
+
+  void _showInfoMessage(BuildContext context, String message) {
+    displayInfoBar(
+      context,
+      builder: (context, close) => InfoBar(
+        title: const Text('Info'), // 7. Added const
+        content: Text(message),
+        severity: InfoBarSeverity.info,
+        action: IconButton(
+          icon: const Icon(FluentIcons.clear), // 7. Added const
+          onPressed: close,
+        ),
+      ),
     );
   }
 
@@ -312,7 +516,7 @@ class EnhancedClientCard extends ConsumerWidget {
   Color _getStatusColor(ClientModel client) {
     // Simple status logic - can be enhanced based on business rules
     final daysSinceUpdate = DateTime.now().difference(client.updatedAt).inDays;
-        
+
     if (daysSinceUpdate <= 7) {
       return Colors.green; // Recently active
     } else if (daysSinceUpdate <= 30) {
@@ -325,7 +529,7 @@ class EnhancedClientCard extends ConsumerWidget {
   String _formatRelativeDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
-    
+
     if (difference.inDays > 0) {
       return '${difference.inDays}d ago';
     } else if (difference.inHours > 0) {
