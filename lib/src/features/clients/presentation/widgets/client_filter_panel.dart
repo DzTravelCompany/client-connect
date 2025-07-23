@@ -5,6 +5,8 @@ import '../../../tags/data/tag_model.dart';
 import '../../logic/client_providers.dart';
 import 'advanced_date_range_picker.dart';
 import 'filter_preset_manager.dart';
+import '../../../../core/design_system/design_tokens.dart';
+import '../../../../core/design_system/component_library.dart';
 
 class ClientFilterPanel extends ConsumerStatefulWidget {
   final TextEditingController searchController;
@@ -39,55 +41,86 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
   bool _isCompanyExpanded = true;
   bool _isDateExpanded = false;
   bool _isPresetExpanded = false;
-  
 
   @override
   Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
     final tagsAsync = ref.watch(allTagsProvider);
     final companiesAsync = ref.watch(clientCompaniesProvider);
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(DesignTokens.space4),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            DesignTokens.surfacePrimary,
+            DesignTokens.surfacePrimary.withValues(alpha: 0.95),
+          ],
+        ),
+        border: Border(
+          right: BorderSide(
+            color: DesignTokens.borderPrimary,
+            width: 1,
+          ),
+        ),
+        boxShadow: DesignTokens.shadowLow,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // Header with design system styling
           Row(
             children: [
+              Container(
+                padding: EdgeInsets.all(DesignTokens.space2),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      DesignTokens.accentPrimary.withValues(alpha: 0.15),
+                      DesignTokens.accentPrimary.withValues(alpha: 0.08),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                ),
+                child: Icon(
+                  FluentIcons.filter,
+                  size: DesignTokens.iconSizeMedium,
+                  color: DesignTokens.accentPrimary,
+                ),
+              ),
+              SizedBox(width: DesignTokens.space3),
               Expanded(
                 child: Text(
                   'Filters',
-                  style: theme.typography.subtitle?.copyWith(
-                    fontWeight: FontWeight.w600,
+                  style: DesignTextStyles.subtitle.copyWith(
+                    fontWeight: DesignTokens.fontWeightSemiBold,
                   ),
                 ),
               ),
               if (_hasActiveFilters())
-                Button(
+                DesignSystemComponents.secondaryButton(
+                  text: 'Clear All',
                   onPressed: widget.onClearFilters,
-                  child: const Text('Clear All'),
                 ),
             ],
           ),
-          const SizedBox(height: 16),
-          // Search
-          TextBox(
+          SizedBox(height: DesignTokens.space4),
+          
+          // Search with design system input
+          DesignSystemComponents.textInput(
             controller: widget.searchController,
             placeholder: 'Search clients...',
-            prefix: const Icon(FluentIcons.search),
+            prefixIcon: FluentIcons.search,
+            suffixIcon: widget.searchController.text.isNotEmpty ? FluentIcons.clear : null,
+            onSuffixIconPressed: widget.searchController.text.isNotEmpty ? () {
+              widget.searchController.clear();
+              widget.onSearchChanged('');
+            } : null,
             onChanged: widget.onSearchChanged,
-            suffix: widget.searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(FluentIcons.clear),
-                    onPressed: () {
-                      widget.searchController.clear();
-                      widget.onSearchChanged('');
-                    },
-                  )
-                : null,
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: DesignTokens.space5),
+          
           // Filter Sections
           Expanded(
             child: ScrollConfiguration(
@@ -102,11 +135,17 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
                       onToggle: () => setState(() => _isTagsExpanded = !_isTagsExpanded),
                       child: tagsAsync.when(
                         data: (tags) => _buildTagsFilter(tags),
-                        loading: () => const ProgressRing(),
-                        error: (_, __) => const Text('Error loading tags'),
+                        loading: () => DesignSystemComponents.skeletonLoader(height: 80),
+                        error: (_, __) => DesignSystemComponents.emptyState(
+                          title: 'Error loading tags',
+                          message: 'Could not load available tags',
+                          icon: FluentIcons.error,
+                          iconColor: DesignTokens.semanticError,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: DesignTokens.space4),
+                    
                     // Company Filter
                     _buildFilterSection(
                       title: 'Company',
@@ -114,11 +153,17 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
                       onToggle: () => setState(() => _isCompanyExpanded = !_isCompanyExpanded),
                       child: companiesAsync.when(
                         data: (companies) => _buildCompanyFilter(companies),
-                        loading: () => const ProgressRing(),
-                        error: (_, __) => const Text('Error loading companies'),
+                        loading: () => DesignSystemComponents.skeletonLoader(height: 120),
+                        error: (_, __) => DesignSystemComponents.emptyState(
+                          title: 'Error loading companies',
+                          message: 'Could not load company list',
+                          icon: FluentIcons.error,
+                          iconColor: DesignTokens.semanticError,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: DesignTokens.space4),
+                    
                     // Date Range Filter
                     _buildFilterSection(
                       title: 'Date Added',
@@ -126,7 +171,8 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
                       onToggle: () => setState(() => _isDateExpanded = !_isDateExpanded),
                       child: _buildDateRangeFilter(),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: DesignTokens.space4),
+                    
                     // Filter Presets
                     _buildFilterPresetsSection(),
                   ],
@@ -134,10 +180,21 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
               ),
             ),
           ),
+          
           // Active Filters Summary
           if (_hasActiveFilters()) ...[
-            const Divider(),
-            _buildActiveFiltersSummary(theme),
+            Container(
+              margin: EdgeInsets.only(top: DesignTokens.space4),
+              padding: EdgeInsets.all(DesignTokens.space3),
+              decoration: BoxDecoration(
+                color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.05),
+                borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                border: Border.all(
+                  color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.2),
+                ),
+              ),
+              child: _buildActiveFiltersSummary(),
+            ),
           ],
         ],
       ),
@@ -150,47 +207,24 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
     required VoidCallback onToggle,
     required Widget child,
   }) {
-    final theme = FluentTheme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: theme.resources.dividerStrokeColorDefault.withValues(alpha: 0.3),
-        ),
-        borderRadius: BorderRadius.circular(8),
-      ),
+    return DesignSystemComponents.standardCard(
+      padding: EdgeInsets.zero,
       child: Column(
         children: [
-          GestureDetector(
-            onTap: onToggle,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                  color: Colors.transparent,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: theme.typography.bodyStrong,
-                      ),
-                    ),
-                    Icon(
-                      isExpanded ? FluentIcons.chevron_up : FluentIcons.chevron_down,
-                      size: 16,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          DesignSystemComponents.navigationItem(
+            label: title,
+            icon: isExpanded ? FluentIcons.chevron_up : FluentIcons.chevron_down,
+            onPressed: onToggle,
+            isActive: isExpanded,
           ),
           if (isExpanded) ...[
-            const Divider(style: DividerThemeData(thickness: 1)),
+            Container(
+              width: double.infinity,
+              height: 1,
+              color: DesignTokens.borderPrimary,
+            ),
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(DesignTokens.space3),
               child: child,
             ),
           ],
@@ -200,17 +234,19 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
   }
 
   Widget _buildTagsFilter(List<TagModel> tags) {
-    // final theme = FluentTheme.of(context);
-    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (tags.isEmpty)
-          const Text('No tags available')
+          DesignSystemComponents.emptyState(
+            title: 'No tags available',
+            message: 'Create some tags to filter clients',
+            icon: FluentIcons.tag,
+          )
         else
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: DesignTokens.space2,
+            runSpacing: DesignTokens.space2,
             children: tags.map((tag) {
               final isSelected = widget.selectedTags.contains(tag.name);
               return _buildFluentChip(
@@ -237,26 +273,27 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    final theme = FluentTheme.of(context);
-    
     return GestureDetector(
       onTap: onTap,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          duration: DesignTokens.animationNormal,
+          padding: EdgeInsets.symmetric(
+            horizontal: DesignTokens.space3,
+            vertical: DesignTokens.space2,
+          ),
           decoration: BoxDecoration(
             color: isSelected
-                ? theme.accentColor.withValues(alpha: 0.1)
-                : theme.resources.cardBackgroundFillColorDefault,
+                ? DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.1)
+                : DesignTokens.surfaceSecondary,
             border: Border.all(
               color: isSelected
-                  ? theme.accentColor
-                  : theme.resources.dividerStrokeColorDefault.withValues(alpha: 0.5),
+                  ? DesignTokens.accentPrimary
+                  : DesignTokens.borderPrimary,
               width: isSelected ? 2 : 1,
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(DesignTokens.radiusRound),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -264,19 +301,20 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
               if (isSelected) ...[
                 Icon(
                   FluentIcons.check_mark,
-                  size: 12,
-                  color: theme.accentColor,
+                  size: DesignTokens.iconSizeSmall,
+                  color: DesignTokens.accentPrimary,
                 ),
-                const SizedBox(width: 4),
+                SizedBox(width: DesignTokens.space1),
               ],
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                style: DesignTextStyles.caption.copyWith(
+                  fontWeight: isSelected 
+                      ? DesignTokens.fontWeightSemiBold 
+                      : DesignTokens.fontWeightRegular,
                   color: isSelected
-                      ? theme.accentColor
-                      : theme.resources.textFillColorPrimary,
+                      ? DesignTokens.accentPrimary
+                      : DesignTokens.textPrimary,
                 ),
               ),
             ],
@@ -291,14 +329,18 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (companies.isEmpty)
-          const Text('No companies found')
+          DesignSystemComponents.emptyState(
+            title: 'No companies found',
+            message: 'No company data available',
+            icon: FluentIcons.build,
+          )
         else
           Column(
             children: companies.take(10).map((company) {
               final isSelected = widget.selectedCompany == company;
               return Container(
                 width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 4),
+                margin: EdgeInsets.only(bottom: DesignTokens.space1),
                 child: RadioButton(
                   checked: isSelected,
                   onChanged: (checked) {
@@ -308,7 +350,7 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
                   },
                   content: Text(
                     company,
-                    style: const TextStyle(fontSize: 14),
+                    style: DesignTextStyles.body,
                   ),
                 ),
               );
@@ -316,11 +358,11 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
           ),
         if (companies.length > 10)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: EdgeInsets.only(top: DesignTokens.space2),
             child: Text(
               '... and ${companies.length - 10} more',
-              style: FluentTheme.of(context).typography.caption?.copyWith(
-                color: FluentTheme.of(context).resources.textFillColorSecondary,
+              style: DesignTextStyles.caption.copyWith(
+                color: DesignTokens.textSecondary,
               ),
             ),
           ),
@@ -329,39 +371,38 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
   }
 
   Widget _buildDateRangeFilter() {
-    final theme = FluentTheme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Quick date range buttons
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: DesignTokens.space2,
+          runSpacing: DesignTokens.space2,
           children: [
             _buildQuickDateButton('Last 7 days', 7),
             _buildQuickDateButton('Last 30 days', 30),
             _buildQuickDateButton('Last 90 days', 90),
           ],
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: DesignTokens.space3),
         
         // Custom date range
         Row(
           children: [
             Expanded(
-              child: Button(
+              child: DesignSystemComponents.secondaryButton(
+                text: widget.dateRange != null ? 'Custom Range' : 'Select Range',
+                icon: FluentIcons.calendar,
                 onPressed: () => _showAdvancedDateRangePicker(),
-                child: Text(
-                  widget.dateRange != null
-                      ? 'Custom Range'
-                      : 'Select Range',
-                ),
               ),
             ),
             if (widget.dateRange != null) ...[
-              const SizedBox(width: 8),
+              SizedBox(width: DesignTokens.space2),
               IconButton(
-                icon: const Icon(FluentIcons.clear),
+                icon: Icon(
+                  FluentIcons.clear,
+                  size: DesignTokens.iconSizeSmall,
+                ),
                 onPressed: () => widget.onFilterChanged(dateRange: null),
               ),
             ],
@@ -369,16 +410,14 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
         ),
         
         if (widget.dateRange != null) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: theme.resources.cardBackgroundFillColorSecondary,
-              borderRadius: BorderRadius.circular(4),
-            ),
+          SizedBox(height: DesignTokens.space2),
+          DesignSystemComponents.standardCard(
+            padding: EdgeInsets.all(DesignTokens.space2),
             child: Text(
               '${_formatDate(widget.dateRange!.start)} - ${_formatDate(widget.dateRange!.end)}',
-              style: theme.typography.caption,
+              style: DesignTextStyles.caption.copyWith(
+                color: DesignTokens.textSecondary,
+              ),
             ),
           ),
         ],
@@ -408,10 +447,9 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
         currentTags: widget.selectedTags,
         currentCompany: widget.selectedCompany,
         currentDateRange: widget.dateRange,
-        currentSortBy: 'name', // You'll need to pass this from parent TODO
-        currentSortAscending: true, // You'll need to pass this from parent
+        currentSortBy: 'name',
+        currentSortAscending: true,
         onPresetSelected: (preset) {
-          // Apply the preset filters
           widget.searchController.text = preset.searchTerm ?? '';
           widget.onFilterChanged(
             tags: preset.tags,
@@ -425,33 +463,22 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
   }
 
   Widget _buildQuickDateButton(String label, int days) {
+    // ignore: unused_local_variable
     final isActive = widget.dateRange != null &&
         widget.dateRange!.start.isAfter(DateTime.now().subtract(Duration(days: days + 1))) &&
         widget.dateRange!.end.isAfter(DateTime.now().subtract(const Duration(days: 1)));
 
-    return Button(
-      style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.all(
-          isActive 
-              ? FluentTheme.of(context).accentColor.withValues(alpha: 0.1)
-              : null,
-        ),
-        foregroundColor: WidgetStateProperty.all(
-          isActive 
-              ? FluentTheme.of(context).accentColor
-              : null,
-        ),
-      ),
+    return DesignSystemComponents.secondaryButton(
+      text: label,
       onPressed: () {
         final end = DateTime.now();
         final start = end.subtract(Duration(days: days));
         widget.onFilterChanged(dateRange: DateTimeRange(start: start, end: end));
       },
-      child: Text(label),
     );
   }
 
-  Widget _buildActiveFiltersSummary(FluentThemeData theme) {
+  Widget _buildActiveFiltersSummary() {
     final activeFilters = <String>[];
     
     if (widget.searchController.text.isNotEmpty) {
@@ -472,29 +499,25 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
       children: [
         Text(
           'Active Filters',
-          style: theme.typography.caption?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: theme.accentColor,
+          style: DesignTextStyles.caption.copyWith(
+            fontWeight: DesignTokens.fontWeightSemiBold,
+            color: DesignTokens.accentPrimary,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: DesignTokens.space2),
         ...activeFilters.map((filter) => Padding(
-          padding: const EdgeInsets.only(bottom: 4),
+          padding: EdgeInsets.only(bottom: DesignTokens.space1),
           child: Row(
             children: [
-              Container(
-                width: 4,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: theme.accentColor,
-                  shape: BoxShape.circle,
-                ),
+              DesignSystemComponents.statusDot(
+                type: SemanticColorType.info,
+                size: 4,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: DesignTokens.space2),
               Expanded(
                 child: Text(
                   filter,
-                  style: theme.typography.caption,
+                  style: DesignTextStyles.caption,
                 ),
               ),
             ],

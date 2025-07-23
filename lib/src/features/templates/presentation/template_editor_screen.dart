@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'widgets/template_type_selector.dart';
 import 'widgets/template_preview_dialog.dart';
+import 'widgets/auto_save_indicator.dart';
 
 class TemplateEditorScreen extends ConsumerStatefulWidget {
   final int? templateId;
@@ -47,58 +48,55 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
   }
 
   void _loadTemplate() async {
-
-    ref.read(templateEditorProvider.notifier).setLoading(true);
-    
-    try {
-
-      if (widget.templateId != null) {
-        final template = await _templateDao.getTemplateById(widget.templateId!);
-        if (template != null) {
-          ref.read(templateEditorProvider.notifier).loadTemplate(
-            blocks: template.blocks,
-            templateType: template.type == "email" ? TemplateType.email : TemplateType.whatsapp,
-            templateName: template.name,
-            templateSubject: template.subject ?? '',
-          );
-          _nameController.text = template.name;
-          _subjectController.text = template.subject ?? '';
-        } else {
-          ref.read(templateEditorProvider.notifier).setError('Template not found');
-        }
-      } else {
-        // This case should ideally not happen if templateId is null,
-        // but as a fallback, we can load empty or default.
-        // For now, matching existing behavior of loading sample if no ID.
-        final sampleBlocks = [
-          TextBlock(
-            id: 'sample-1',
-            text: 'Welcome to our newsletter!',
-            fontSize: 24.0,
-            fontWeight: 'bold',
-          ),
-          ImageBlock(
-            id: 'sample-2',
-            imageUrl: '/placeholder.svg?height=200&width=400',
-            width: 400,
-            height: 200,
-          ),
-        ];
-        
+  ref.read(templateEditorProvider.notifier).setLoading(true);
+  
+  try {
+    if (widget.templateId != null) {
+      final template = await _templateDao.getTemplateById(widget.templateId!);
+      if (template != null) {
         ref.read(templateEditorProvider.notifier).loadTemplate(
-          blocks: sampleBlocks,
-          templateType: TemplateType.email,
-          templateName: 'Sample Template',
-          templateSubject: 'Sample Subject',
+          blocks: template.blocks,
+          templateType: template.type == "email" ? TemplateType.email : TemplateType.whatsapp,
+          templateName: template.name,
+          templateSubject: template.subject ?? '',
+          templateId: template.id,
         );
-        
-        _nameController.text = 'Sample Template';
-        _subjectController.text = 'Sample Subject';
+        _nameController.text = template.name;
+        _subjectController.text = template.subject ?? '';
+      } else {
+        ref.read(templateEditorProvider.notifier).setError('Template not found');
       }
-    } catch (e) {
-      ref.read(templateEditorProvider.notifier).setError('Failed to load template: $e');
+    } else {
+      // For new templates, create a placeholder template to get an ID for auto-save
+      final placeholderTemplate = TemplateModel(
+        id: 0,
+        name: 'New Template',
+        subject: '',
+        body: '',
+        templateType: TemplateType.email,
+        blocks: [],
+        isEmail: true,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      
+      final createdTemplate = await _templateDao.createTemplate(placeholderTemplate);
+      
+      ref.read(templateEditorProvider.notifier).loadTemplate(
+        blocks: [],
+        templateType: TemplateType.email,
+        templateName: 'New Template',
+        templateSubject: '',
+        templateId: createdTemplate.id,
+      );
+      
+      _nameController.text = 'New Template';
+      _subjectController.text = '';
     }
+  } catch (e) {
+    ref.read(templateEditorProvider.notifier).setError('Failed to load template: $e');
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -116,44 +114,163 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
   }
 
   Widget _buildHeader(BuildContext context, FluentThemeData theme, TemplateEditorState state) {
-    return PageHeader(
+  return Container(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          theme.cardColor,
+          theme.cardColor.withValues(alpha: 0.95),
+        ],
+      ),
+      border: Border(
+        bottom: BorderSide(
+          color: theme.accentColor.withValues(alpha: 0.2),
+          width: 1,
+        ),
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.05),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: PageHeader(
       title: Row(
         children: [
-          IconButton(
-            icon: const Icon(FluentIcons.back),
-            onPressed: () => _handleBack(context),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: theme.accentColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.accentColor.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Icon(
+              FluentIcons.edit,
+              size: 20,
+              color: theme.accentColor,
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.templateId == null ? 'New Template' : 'Edit Template'),
-                if (state.templateName.isNotEmpty)
+                Row(
+                  children: [
+                    Text(
+                      widget.templateId == null ? 'Create Template' : 'Edit Template',
+                      style: theme.typography.subtitle?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (state.templateType == TemplateType.whatsapp) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF25D366).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              FluentIcons.chat,
+                              size: 10,
+                              color: const Color(0xFF25D366),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'WhatsApp',
+                              style: TextStyle(
+                                color: const Color(0xFF25D366),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF007ACC).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              FluentIcons.mail,
+                              size: 10,
+                              color: const Color(0xFF007ACC),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Email',
+                              style: TextStyle(
+                                color: const Color(0xFF007ACC),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (state.templateName.isNotEmpty) ...[
+                  const SizedBox(height: 2),
                   Text(
                     state.templateName,
                     style: theme.typography.caption?.copyWith(
                       color: theme.inactiveColor,
+                      fontSize: 11,
                     ),
                   ),
+                ],
               ],
             ),
           ),
-          if (state.isDirty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: theme.accentColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'Unsaved',
-                style: TextStyle(
-                  color: theme.accentColor,
-                  fontSize: 10,
-                ),
-              ),
+          // Auto-save indicator
+          const AutoSaveIndicator(),
+          const SizedBox(width: 8),
+          // Template stats
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.accentColor.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
             ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  FluentIcons.build_definition,
+                  size: 12,
+                  color: theme.accentColor,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${state.blocks.length} blocks',
+                  style: TextStyle(
+                    color: theme.accentColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
       commandBar: CommandBar(
@@ -174,8 +291,11 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
           ),
           CommandBarSeparator(),
           CommandBarButton(
-            icon: const Icon(FluentIcons.save),
-            label: const Text('Save'),
+            icon: Icon(
+              state.isDirty ? FluentIcons.save : FluentIcons.save_as,
+              color: state.isDirty ? Colors.orange : null,
+            ),
+            label: Text(state.isDirty ? 'Save Changes' : 'Saved'),
             onPressed: state.isDirty ? () => _saveTemplate(context) : null,
           ),
           CommandBarButton(
@@ -185,6 +305,13 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
           ),
           CommandBarSeparator(),
           CommandBarButton(
+            icon: const Icon(FluentIcons.copy),
+            label: const Text('Duplicate'),
+            onPressed: state.blocks.isNotEmpty
+                ? () => _duplicateTemplate(context)
+                : null,
+          ),
+          CommandBarButton(
             icon: const Icon(FluentIcons.clear_formatting),
             label: const Text('Clear'),
             onPressed: state.blocks.isNotEmpty
@@ -193,8 +320,9 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildErrorState(BuildContext context, String error) {
     final theme = FluentTheme.of(context);
@@ -238,13 +366,25 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: theme.cardColor,
+            gradient: LinearGradient(
+              colors: [
+                theme.cardColor,
+                theme.cardColor.withValues(alpha: 0.95),
+              ],
+            ),
             border: Border(
               bottom: BorderSide(
-                color: theme.accentColor,
+                color: theme.accentColor.withValues(alpha: 0.15),
                 width: 1,
               ),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Row(
             children: [
@@ -273,6 +413,8 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
                 const SizedBox(width: 16),
               ],
               const TemplateTypeSelector(),
+              const SizedBox(width: 16),
+              const AutoSaveIndicator(),
             ],
           ),
         ),
@@ -573,4 +715,59 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
       ),
     );
   }
+
+  void _duplicateTemplate(BuildContext context) async {
+  final state = ref.read(templateEditorProvider);
+  
+  showDialog(
+    context: context,
+    builder: (context) => ContentDialog(
+      title: const Text('Duplicate Template'),
+      content: const Text('Create a copy of this template with a new name?'),
+      actions: [
+        Button(
+          child: const Text('Cancel'),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        FilledButton(
+          child: const Text('Duplicate'),
+          onPressed: () async {
+            Navigator.of(context).pop();
+            
+            if (widget.templateId != null) {
+              try {
+                final duplicated = await _templateDao.duplicateTemplate(widget.templateId!);
+                if (context.mounted) {
+                  displayInfoBar(
+                    context,
+                    builder: (context, close) => InfoBar(
+                      title: const Text('Template Duplicated'),
+                      content: Text('Created "${duplicated.name}"'),
+                      severity: InfoBarSeverity.success,
+                      onClose: close,
+                    ),
+                  );
+                  // Navigate to edit the duplicated template
+                  context.go('/templates/edit/${duplicated.id}');
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  displayInfoBar(
+                    context,
+                    builder: (context, close) => InfoBar(
+                      title: const Text('Duplication Failed'),
+                      content: Text('Failed to duplicate template: $e'),
+                      severity: InfoBarSeverity.error,
+                      onClose: close,
+                    ),
+                  );
+                }
+              }
+            }
+          },
+        ),
+      ],
+    ),
+  );
+}
 }

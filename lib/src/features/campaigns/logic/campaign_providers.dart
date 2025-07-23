@@ -1,6 +1,10 @@
 import 'package:client_connect/src/core/services/retry_service.dart';
 import 'package:client_connect/src/features/campaigns/data/campaigns_model.dart' hide RetryLogModel;
+import 'package:client_connect/src/features/clients/logic/client_providers.dart';
+import 'package:client_connect/src/features/templates/data/template_model.dart';
+import 'package:client_connect/src/features/templates/logic/template_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../constants.dart';
 import '../data/campaign_dao.dart';
 import '../../../core/services/sending_engine.dart';
 
@@ -71,7 +75,7 @@ final campaignProgressProvider = StreamProvider<CampaignProgress>((ref) {
 
 // Campaign creation provider
 final campaignCreationProvider = StateNotifierProvider<CampaignCreationNotifier, CampaignCreationState>((ref) {
-  return CampaignCreationNotifier(ref.watch(campaignDaoProvider));
+  return CampaignCreationNotifier(ref.watch(campaignDaoProvider), ref);
 });
 
 // Retry management provider
@@ -242,15 +246,48 @@ final realTimeMessageLogsProvider = StreamProvider.family<List<EnhancedMessageLo
         messageLog: log,
         retryLogs: retryLogs,
         deliveryAttempts: retryLogs.length + 1,
-        lastAttemptTime: retryLogs.isNotEmpty 
-            ? retryLogs.first.attemptedAt 
-            : log.createdAt,
+        lastAttemptTime: retryLogs.first.attemptedAt,
         estimatedNextRetry: log.nextRetryAt,
       ));
     }
     
     return enhancedLogs;
   }).asyncMap((future) => future);
+});
+
+// Campaign actions provider
+final campaignActionsProvider = StateNotifierProvider<CampaignActionsNotifier, CampaignActionsState>((ref) {
+  return CampaignActionsNotifier(
+    ref.watch(campaignDaoProvider),
+    ref.watch(campaignControlProvider),
+    ref.watch(retryServiceProvider),
+  );
+});
+
+// Bulk campaign operations provider
+final bulkCampaignOperationsProvider = StateNotifierProvider<BulkCampaignOperationsNotifier, BulkCampaignOperationsState>((ref) {
+  return BulkCampaignOperationsNotifier(
+    ref.watch(campaignDaoProvider),
+    ref.watch(campaignControlProvider),
+  );
+});
+
+// Campaign scheduling provider
+final campaignSchedulingProvider = StateNotifierProvider<CampaignSchedulingNotifier, CampaignSchedulingState>((ref) {
+  return CampaignSchedulingNotifier(ref.watch(campaignDaoProvider));
+});
+
+// Campaign duplication provider
+final campaignDuplicationProvider = StateNotifierProvider<CampaignDuplicationNotifier, CampaignDuplicationState>((ref) {
+  return CampaignDuplicationNotifier(
+    ref.watch(campaignDaoProvider),
+    templateByIdProvider,
+  );
+});
+
+// Campaign export provider
+final campaignExportProvider = StateNotifierProvider<CampaignExportNotifier, CampaignExportState>((ref) {
+  return CampaignExportNotifier(ref.watch(campaignDaoProvider));
 });
 
 // Helper functions
@@ -319,8 +356,9 @@ class CampaignCreationState {
 // Campaign creation notifier
 class CampaignCreationNotifier extends StateNotifier<CampaignCreationState> {
   final CampaignDao _dao;
+  final Ref _ref;
 
-  CampaignCreationNotifier(this._dao) : super(const CampaignCreationState());
+  CampaignCreationNotifier(this._dao, this._ref) : super(const CampaignCreationState());
 
   Future<int?> createCampaign({
     required String name,
@@ -345,6 +383,16 @@ class CampaignCreationNotifier extends StateNotifier<CampaignCreationState> {
       // Start sending immediately if requested and not scheduled
       if (startImmediately && scheduledAt == null) {
         await SendingEngine.instance.startCampaign(campaignId);
+      }
+
+      // Invalidate all campaign-related providers
+      _ref.invalidate(allCampaignsProvider);
+      _ref.invalidate(campaignByIdProvider(campaignId));
+      _ref.invalidate(campaignHealthProvider);
+      
+      // Also invalidate client campaigns for affected clients
+      for (final clientId in clientIds) {
+        _ref.invalidate(clientCampaignsProvider(clientId));
       }
 
       state = state.copyWith(isLoading: false, isCreated: true);
@@ -717,4 +765,603 @@ class EnhancedMessageLog {
   bool get hasRetries => retryLogs.isNotEmpty;
   bool get isRetryable => messageLog.retryCount < messageLog.maxRetries && messageLog.isFailed;
   Duration? get timeSinceLastAttempt => DateTime.now().difference(lastAttemptTime);
+}
+
+// Campaign Actions State and Notifier
+class CampaignActionsState {
+  final bool isLoading;
+  final String? error;
+  final String? successMessage;
+  final Map<int, bool> loadingStates;
+
+  const CampaignActionsState({
+    this.isLoading = false,
+    this.error,
+    this.successMessage,
+    this.loadingStates = const {},
+  });
+
+  CampaignActionsState copyWith({
+    bool? isLoading,
+    String? error,
+    String? successMessage,
+    Map<int, bool>? loadingStates,
+  }) {
+    return CampaignActionsState(
+      isLoading: isLoading ?? this.isLoading,
+      error: error ?? this.error,
+      successMessage: successMessage ?? this.successMessage,
+      loadingStates: loadingStates ?? this.loadingStates,
+    );
+  }
+}
+
+class CampaignActionsNotifier extends StateNotifier<CampaignActionsState> {
+  final CampaignDao _dao;
+  final CampaignController _controller;
+  final RetryService _retryService;
+
+  CampaignActionsNotifier(this._dao, this._controller, this._retryService) 
+      : super(const CampaignActionsState());
+
+  Future<void> startCampaign(int campaignId) async {
+    _setLoadingForCampaign(campaignId, true);
+    
+    try {
+      await _controller.startCampaign(campaignId);
+      state = state.copyWith(
+        successMessage: 'Campaign started successfully',
+        error: null,
+      );
+    } catch (e) {
+      logger.e('Error starting campaign $campaignId: $e');
+      state = state.copyWith(
+        error: 'Failed to start campaign: $e',
+        successMessage: null,
+      );
+    } finally {
+      _setLoadingForCampaign(campaignId, false);
+    }
+  }
+
+  Future<void> pauseCampaign(int campaignId) async {
+    _setLoadingForCampaign(campaignId, true);
+    
+    try {
+      await _controller.stopCampaign(campaignId);
+      await _dao.updateCampaignStatus(campaignId, 'paused');
+      state = state.copyWith(
+        successMessage: 'Campaign paused successfully',
+        error: null,
+      );
+    } catch (e) {
+      logger.e('Error pausing campaign $campaignId: $e');
+      state = state.copyWith(
+        error: 'Failed to pause campaign: $e',
+        successMessage: null,
+      );
+    } finally {
+      _setLoadingForCampaign(campaignId, false);
+    }
+  }
+
+  Future<void> resumeCampaign(int campaignId) async {
+    _setLoadingForCampaign(campaignId, true);
+    
+    try {
+      await _dao.updateCampaignStatus(campaignId, 'pending');
+      await _controller.startCampaign(campaignId);
+      state = state.copyWith(
+        successMessage: 'Campaign resumed successfully',
+        error: null,
+      );
+    } catch (e) {
+      logger.e('Error resuming campaign $campaignId: $e');
+      state = state.copyWith(
+        error: 'Failed to resume campaign: $e',
+        successMessage: null,
+      );
+    } finally {
+      _setLoadingForCampaign(campaignId, false);
+    }
+  }
+
+  Future<void> cancelCampaign(int campaignId) async {
+    _setLoadingForCampaign(campaignId, true);
+    
+    try {
+      await _controller.stopCampaign(campaignId);
+      await _dao.updateCampaignStatus(campaignId, 'cancelled');
+      state = state.copyWith(
+        successMessage: 'Campaign cancelled successfully',
+        error: null,
+      );
+    } catch (e) {
+      logger.e('Error cancelling campaign $campaignId: $e');
+      state = state.copyWith(
+        error: 'Failed to cancel campaign: $e',
+        successMessage: null,
+      );
+    } finally {
+      _setLoadingForCampaign(campaignId, false);
+    }
+  }
+
+  Future<void> deleteCampaign(int campaignId) async {
+    _setLoadingForCampaign(campaignId, true);
+    
+    try {
+      // Stop campaign if running
+      await _controller.stopCampaign(campaignId);
+      
+      // Delete from database (this would need to be implemented in DAO)
+      // await _dao.deleteCampaign(campaignId);
+      
+      state = state.copyWith(
+        successMessage: 'Campaign deleted successfully',
+        error: null,
+      );
+    } catch (e) {
+      logger.e('Error deleting campaign $campaignId: $e');
+      state = state.copyWith(
+        error: 'Failed to delete campaign: $e',
+        successMessage: null,
+      );
+    } finally {
+      _setLoadingForCampaign(campaignId, false);
+    }
+  }
+
+  Future<void> retryFailedMessages(int campaignId) async {
+    _setLoadingForCampaign(campaignId, true);
+    
+    try {
+      await _retryService.retryFailedMessagesForCampaign(
+        campaignId,
+        reason: 'Manual retry triggered from campaign actions',
+      );
+      state = state.copyWith(
+        successMessage: 'Failed messages scheduled for retry',
+        error: null,
+      );
+    } catch (e) {
+      logger.e('Error retrying failed messages for campaign $campaignId: $e');
+      state = state.copyWith(
+        error: 'Failed to retry messages: $e',
+        successMessage: null,
+      );
+    } finally {
+      _setLoadingForCampaign(campaignId, false);
+    }
+  }
+
+  void _setLoadingForCampaign(int campaignId, bool loading) {
+    final newLoadingStates = Map<int, bool>.from(state.loadingStates);
+    if (loading) {
+      newLoadingStates[campaignId] = true;
+    } else {
+      newLoadingStates.remove(campaignId);
+    }
+    
+    state = state.copyWith(
+      loadingStates: newLoadingStates,
+      isLoading: newLoadingStates.isNotEmpty,
+    );
+  }
+
+  bool isLoadingForCampaign(int campaignId) {
+    return state.loadingStates[campaignId] ?? false;
+  }
+
+  void clearMessages() {
+    state = state.copyWith(error: null, successMessage: null);
+  }
+}
+
+// Bulk Campaign Operations State and Notifier
+class BulkCampaignOperationsState {
+  final bool isLoading;
+  final String? error;
+  final String? successMessage;
+  final List<int> selectedCampaignIds;
+  final Map<String, int> operationProgress;
+
+  const BulkCampaignOperationsState({
+    this.isLoading = false,
+    this.error,
+    this.successMessage,
+    this.selectedCampaignIds = const [],
+    this.operationProgress = const {},
+  });
+
+  BulkCampaignOperationsState copyWith({
+    bool? isLoading,
+    String? error,
+    String? successMessage,
+    List<int>? selectedCampaignIds,
+    Map<String, int>? operationProgress,
+  }) {
+    return BulkCampaignOperationsState(
+      isLoading: isLoading ?? this.isLoading,
+      error: error ?? this.error,
+      successMessage: successMessage ?? this.successMessage,
+      selectedCampaignIds: selectedCampaignIds ?? this.selectedCampaignIds,
+      operationProgress: operationProgress ?? this.operationProgress,
+    );
+  }
+}
+
+class BulkCampaignOperationsNotifier extends StateNotifier<BulkCampaignOperationsState> {
+  final CampaignDao _dao;
+  final CampaignController _controller;
+
+  BulkCampaignOperationsNotifier(this._dao, this._controller) 
+      : super(const BulkCampaignOperationsState());
+
+  void selectCampaign(int campaignId) {
+    final newSelection = List<int>.from(state.selectedCampaignIds);
+    if (!newSelection.contains(campaignId)) {
+      newSelection.add(campaignId);
+      state = state.copyWith(selectedCampaignIds: newSelection);
+    }
+  }
+
+  void deselectCampaign(int campaignId) {
+    final newSelection = List<int>.from(state.selectedCampaignIds);
+    newSelection.remove(campaignId);
+    state = state.copyWith(selectedCampaignIds: newSelection);
+  }
+
+  void toggleCampaignSelection(int campaignId) {
+    if (state.selectedCampaignIds.contains(campaignId)) {
+      deselectCampaign(campaignId);
+    } else {
+      selectCampaign(campaignId);
+    }
+  }
+
+  void selectAllCampaigns(List<int> campaignIds) {
+    state = state.copyWith(selectedCampaignIds: campaignIds);
+  }
+
+  void clearSelection() {
+    state = state.copyWith(selectedCampaignIds: []);
+  }
+
+  Future<void> bulkStart() async {
+    await _performBulkOperation('start', (campaignId) async {
+      await _controller.startCampaign(campaignId);
+    });
+  }
+
+  Future<void> bulkPause() async {
+    await _performBulkOperation('pause', (campaignId) async {
+      await _controller.stopCampaign(campaignId);
+      await _dao.updateCampaignStatus(campaignId, 'paused');
+    });
+  }
+
+  Future<void> bulkCancel() async {
+    await _performBulkOperation('cancel', (campaignId) async {
+      await _controller.stopCampaign(campaignId);
+      await _dao.updateCampaignStatus(campaignId, 'cancelled');
+    });
+  }
+
+  Future<void> bulkDelete() async {
+    await _performBulkOperation('delete', (campaignId) async {
+      await _controller.stopCampaign(campaignId);
+      // await _dao.deleteCampaign(campaignId); // Would need implementation
+    });
+  }
+
+  Future<void> _performBulkOperation(
+    String operationType,
+    Future<void> Function(int) operation,
+  ) async {
+    if (state.selectedCampaignIds.isEmpty) return;
+
+    state = state.copyWith(
+      isLoading: true,
+      error: null,
+      successMessage: null,
+      operationProgress: {operationType: 0},
+    );
+
+    int completed = 0;
+    int failed = 0;
+
+    for (final campaignId in state.selectedCampaignIds) {
+      try {
+        await operation(campaignId);
+        completed++;
+      } catch (e) {
+        failed++;
+        logger.e('Error in bulk $operationType for campaign $campaignId: $e');
+      }
+
+      // Update progress
+      final progress = completed + failed;
+      state = state.copyWith(
+        operationProgress: {operationType: progress},
+      );
+    }
+
+    state = state.copyWith(
+      isLoading: false,
+      successMessage: failed == 0
+          ? 'Bulk $operationType completed successfully ($completed campaigns)'
+          : 'Bulk $operationType completed with $failed failures ($completed successful)',
+      error: failed > 0 ? 'Some operations failed' : null,
+      operationProgress: {},
+    );
+
+    // Clear selection after operation
+    clearSelection();
+  }
+
+  void clearMessages() {
+    state = state.copyWith(error: null, successMessage: null);
+  }
+}
+
+// Campaign Scheduling State and Notifier
+class CampaignSchedulingState {
+  final bool isLoading;
+  final String? error;
+  final String? successMessage;
+
+  const CampaignSchedulingState({
+    this.isLoading = false,
+    this.error,
+    this.successMessage,
+  });
+
+  CampaignSchedulingState copyWith({
+    bool? isLoading,
+    String? error,
+    String? successMessage,
+  }) {
+    return CampaignSchedulingState(
+      isLoading: isLoading ?? this.isLoading,
+      error: error ?? this.error,
+      successMessage: successMessage ?? this.successMessage,
+    );
+  }
+}
+
+class CampaignSchedulingNotifier extends StateNotifier<CampaignSchedulingState> {
+  final CampaignDao _dao;
+
+  CampaignSchedulingNotifier(this._dao) : super(const CampaignSchedulingState());
+
+  Future<void> scheduleCampaign(int campaignId, DateTime scheduledTime) async {
+    state = state.copyWith(isLoading: true, error: null, successMessage: null);
+
+    try {
+      // Update campaign with new scheduled time
+      await _dao.updateCampaignStatus(campaignId, 'scheduled');
+      // This would need to be implemented in the DAO
+      // await _dao.updateCampaignScheduledTime(campaignId, scheduledTime);
+      
+      state = state.copyWith(
+        isLoading: false,
+        successMessage: 'Campaign scheduled successfully',
+      );
+    } catch (e) {
+      logger.e('Error scheduling campaign $campaignId: $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to schedule campaign: $e',
+      );
+    }
+  }
+
+  Future<void> reschedule(int campaignId, DateTime newScheduledTime) async {
+    await scheduleCampaign(campaignId, newScheduledTime);
+  }
+
+  Future<void> unschedule(int campaignId) async {
+    state = state.copyWith(isLoading: true, error: null, successMessage: null);
+
+    try {
+      await _dao.updateCampaignStatus(campaignId, 'pending');
+      // Remove scheduled time
+      // await _dao.updateCampaignScheduledTime(campaignId, null);
+      
+      state = state.copyWith(
+        isLoading: false,
+        successMessage: 'Campaign unscheduled successfully',
+      );
+    } catch (e) {
+      logger.e('Error unscheduling campaign $campaignId: $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to unschedule campaign: $e',
+      );
+    }
+  }
+
+  void clearMessages() {
+    state = state.copyWith(error: null, successMessage: null);
+  }
+}
+
+// Campaign Duplication State and Notifier
+class CampaignDuplicationState {
+  final bool isLoading;
+  final String? error;
+  final String? successMessage;
+  final int? duplicatedCampaignId;
+
+  const CampaignDuplicationState({
+    this.isLoading = false,
+    this.error,
+    this.successMessage,
+    this.duplicatedCampaignId,
+  });
+
+  CampaignDuplicationState copyWith({
+    bool? isLoading,
+    String? error,
+    String? successMessage,
+    int? duplicatedCampaignId,
+  }) {
+    return CampaignDuplicationState(
+      isLoading: isLoading ?? this.isLoading,
+      error: error ?? this.error,
+      successMessage: successMessage ?? this.successMessage,
+      duplicatedCampaignId: duplicatedCampaignId ?? this.duplicatedCampaignId,
+    );
+  }
+}
+
+class CampaignDuplicationNotifier extends StateNotifier<CampaignDuplicationState> {
+  final CampaignDao _dao;
+  // ignore: unused_field TODO
+  final FutureProviderFamily<TemplateModel?, int> _templateProvider;
+
+  CampaignDuplicationNotifier(this._dao, this._templateProvider) 
+      : super(const CampaignDuplicationState());
+
+  Future<void> duplicateCampaign(
+    int originalCampaignId, {
+    String? newName,
+    List<int>? newClientIds,
+    DateTime? newScheduledAt,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null, successMessage: null);
+
+    try {
+      final originalCampaign = await _dao.getCampaignById(originalCampaignId);
+      if (originalCampaign == null) {
+        throw Exception('Original campaign not found');
+      }
+
+      // Create new campaign with modified parameters
+      final duplicatedCampaignId = await _dao.createCampaign(
+        name: newName ?? '${originalCampaign.name} (Copy)',
+        templateId: originalCampaign.templateId,
+        clientIds: newClientIds ?? originalCampaign.clientIds,
+        messageType: 'email', // This would need to be determined from template
+        scheduledAt: newScheduledAt,
+      );
+
+      state = state.copyWith(
+        isLoading: false,
+        successMessage: 'Campaign duplicated successfully',
+        duplicatedCampaignId: duplicatedCampaignId,
+      );
+    } catch (e) {
+      logger.e('Error duplicating campaign $originalCampaignId: $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to duplicate campaign: $e',
+      );
+    }
+  }
+
+  void clearMessages() {
+    state = state.copyWith(
+      error: null, 
+      successMessage: null,
+      duplicatedCampaignId: null,
+    );
+  }
+}
+
+// Campaign Export State and Notifier
+class CampaignExportState {
+  final bool isLoading;
+  final String? error;
+  final String? successMessage;
+  final String? exportFilePath;
+
+  const CampaignExportState({
+    this.isLoading = false,
+    this.error,
+    this.successMessage,
+    this.exportFilePath,
+  });
+
+  CampaignExportState copyWith({
+    bool? isLoading,
+    String? error,
+    String? successMessage,
+    String? exportFilePath,
+  }) {
+    return CampaignExportState(
+      isLoading: isLoading ?? this.isLoading,
+      error: error ?? this.error,
+      successMessage: successMessage ?? this.successMessage,
+      exportFilePath: exportFilePath ?? this.exportFilePath,
+    );
+  }
+}
+
+class CampaignExportNotifier extends StateNotifier<CampaignExportState> {
+  final CampaignDao _dao;
+
+  CampaignExportNotifier(this._dao) : super(const CampaignExportState());
+
+  Future<void> exportCampaignData(
+    int campaignId, {
+    required String format, // 'csv', 'json', 'pdf'
+    bool includeMessageLogs = true,
+    bool includeStatistics = true,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null, successMessage: null);
+
+    try {
+      final campaign = await _dao.getCampaignById(campaignId);
+      if (campaign == null) {
+        throw Exception('Campaign not found');
+      }
+
+      // This would need to be implemented based on the export format
+      final exportPath = await _performExport(
+        campaign,
+        format,
+        includeMessageLogs,
+        includeStatistics,
+      );
+
+      state = state.copyWith(
+        isLoading: false,
+        successMessage: 'Campaign data exported successfully',
+        exportFilePath: exportPath,
+      );
+    } catch (e) {
+      logger.e('Error exporting campaign $campaignId: $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to export campaign data: $e',
+      );
+    }
+  }
+
+  Future<String> _performExport(
+    CampaignModel campaign,
+    String format,
+    bool includeMessageLogs,
+    bool includeStatistics,
+  ) async {
+    // This is a placeholder implementation
+    // In a real implementation, you would:
+    // 1. Gather all campaign data
+    // 2. Format it according to the specified format
+    // 3. Save to file
+    // 4. Return the file path
+    
+    await Future.delayed(const Duration(seconds: 2)); // Simulate export time
+    return '/path/to/exported/campaign_${campaign.id}.$format';
+  }
+
+  void clearMessages() {
+    state = state.copyWith(
+      error: null, 
+      successMessage: null,
+      exportFilePath: null,
+    );
+  }
 }

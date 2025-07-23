@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/campaigns_model.dart';
 import 'campaign_status_badge.dart';
 import 'campaign_progress_indicator.dart';
+import 'campaign_actions_menu.dart';
 
 
 class EnhancedCampaignCard extends ConsumerStatefulWidget {
@@ -106,21 +107,26 @@ class _EnhancedCampaignCardState extends ConsumerState<EnhancedCampaignCard>
                         _buildDetails(),
                         const SizedBox(height: 12),
                         
-                        // Progress indicator (for active campaigns)
-                        if (widget.campaign.isInProgress || widget.campaign.isCompleted)
+                        // Progress indicator (for active campaigns) - only show if there's space
+                        if (widget.campaign.isInProgress || widget.campaign.isCompleted) ...[
                           CampaignProgressIndicator(
                             campaign: widget.campaign,
                             showStats: true,
                             height: 6,
                           ),
+                          const SizedBox(height: 12),
+                        ],
                         
-                        const Spacer(),
-                        
-                        // Action buttons (visible on hover)
-                        AnimatedOpacity(
-                          opacity: _isHovered ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 200),
-                          child: _buildActionButtons(),
+                        // Action buttons (visible on hover) - remove Spacer and use Expanded Column
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.bottomCenter,
+                            child: AnimatedOpacity(
+                              opacity: _isHovered ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 200),
+                              child: _buildActionButtons(),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -225,52 +231,109 @@ class _EnhancedCampaignCardState extends ConsumerState<EnhancedCampaignCard>
   }
 
   Widget _buildActionButtons() {
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        if (widget.onStart != null)
-          Expanded(
-            child: Button(
-              onPressed: widget.onStart,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(FluentIcons.play, size: 12),
-                  const SizedBox(width: 4),
-                  const Text('Start', style: TextStyle(fontSize: 11)),
-                ],
+        // Primary action row
+        Row(
+          children: [
+            if (widget.onStart != null)
+              Expanded(
+                child: SizedBox(
+                  height: 28,
+                  child: Button(
+                    onPressed: widget.onStart,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(FluentIcons.play, size: 12),
+                        const SizedBox(width: 4),
+                        const Text('Start', style: TextStyle(fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            if (widget.onPause != null)
+              Expanded(
+                child: SizedBox(
+                  height: 28,
+                  child: Button(
+                    onPressed: widget.onPause,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(FluentIcons.pause, size: 12),
+                        const SizedBox(width: 4),
+                        const Text('Pause', style: TextStyle(fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            if (widget.onStart != null || widget.onPause != null)
+              const SizedBox(width: 8),
+            Expanded(
+              child: SizedBox(
+                height: 28,
+                child: Button(
+                  onPressed: widget.onViewDetails,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(FluentIcons.view, size: 12),
+                      const SizedBox(width: 4),
+                      const Text('Details', style: TextStyle(fontSize: 11)),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-        if (widget.onPause != null)
-          Expanded(
-            child: Button(
-              onPressed: widget.onPause,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(FluentIcons.pause, size: 12),
-                  const SizedBox(width: 4),
-                  const Text('Pause', style: TextStyle(fontSize: 11)),
-                ],
-              ),
-            ),
-          ),
-        if (widget.onStart != null || widget.onPause != null)
-          const SizedBox(width: 8),
-        Expanded(
+          ],
+        ),
+        const SizedBox(height: 6),
+        // Secondary action row
+        SizedBox(
+          width: double.infinity,
+          height: 28,
           child: Button(
-            onPressed: widget.onViewDetails,
+            style: ButtonStyle(
+              padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 8)),
+            ),
+            onPressed: () => _showActionsMenu(ref.context),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(FluentIcons.view, size: 12),
+                const Icon(FluentIcons.more, size: 14),
                 const SizedBox(width: 4),
-                const Text('Details', style: TextStyle(fontSize: 11)),
+                const Text('More Actions', style: TextStyle(fontSize: 11)),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  void _showActionsMenu(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: Text('${widget.campaign.name} - Actions'),
+        content: CampaignActionsMenu(
+          campaign: widget.campaign,
+          onClose: () => Navigator.of(context).pop(),
+        ),
+        actions: [
+          Button(
+            child: const Text('Close'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
     );
   }
 

@@ -3,6 +3,8 @@ import 'package:client_connect/src/features/templates/logic/tempalte_editor_prov
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'auto_save_indicator.dart';
+
 class EditorInspector extends ConsumerStatefulWidget {
   const EditorInspector({super.key});
 
@@ -55,93 +57,197 @@ class _EditorInspectorState extends ConsumerState<EditorInspector> {
     final editorState = ref.watch(templateEditorProvider);
     final theme = FluentTheme.of(context);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: theme.accentColor,
-                width: 1,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            theme.cardColor.withValues(alpha: 0.95),
+            theme.cardColor.withValues(alpha: 0.85),
+          ],
+        ),
+        border: Border(
+          left: BorderSide(
+            color: theme.accentColor.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(-2, 0),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: theme.accentColor.withValues(alpha: 0.15),
+                  width: 1,
+                ),
               ),
             ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.accentColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.accentColor.withValues(alpha: 0.15),
+                        theme.accentColor.withValues(alpha: 0.08),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.accentColor.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Icon(
+                    FluentIcons.settings,
+                    size: 20,
+                    color: theme.accentColor,
+                  ),
                 ),
-                child: Icon(
-                  FluentIcons.settings,
-                  size: 20,
-                  color: theme.accentColor,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Properties',
+                        style: theme.typography.subtitle?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        editorState.selectedBlock != null 
+                            ? _getBlockTypeName(editorState.selectedBlock!.type)
+                            : 'Select a block to edit',
+                        style: theme.typography.caption?.copyWith(
+                          color: theme.inactiveColor,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Inspector',
-                style: theme.typography.subtitle,
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        Expanded(
-          child: editorState.selectedBlock == null
-              ? _buildNoSelectionState(context, theme, editorState)
-              : _buildInspectorContent(context, ref, editorState.selectedBlock!, theme, editorState),
-        ),
-      ],
+          Expanded(
+            child: editorState.selectedBlock == null
+                ? _buildNoSelectionState(context, theme, editorState)
+                : _buildInspectorContent(context, ref, editorState.selectedBlock!, theme, editorState),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildNoSelectionState(BuildContext context, FluentThemeData theme, TemplateEditorState state) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: theme.accentColor.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(50),
+    return ListView(
+      padding: const EdgeInsets.all(32),
+      children: [
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      theme.accentColor.withValues(alpha: 0.08),
+                      theme.accentColor.withValues(alpha: 0.05),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(50),
+                  border: Border.all(
+                    color: theme.accentColor.withValues(alpha: 0.15),
+                  ),
+                ),
+                child: Icon(
+                  state.isPreviewMode ? FluentIcons.preview : FluentIcons.touch,
+                  size: 48,
+                  color: theme.accentColor.withValues(alpha: 0.6),
+                ),
               ),
-              child: Icon(
-                state.isPreviewMode ? FluentIcons.preview : FluentIcons.drag_object,
-                size: 48,
-                color: theme.inactiveColor,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              state.isPreviewMode ? 'Preview Mode Active' : 'No block selected',
-              style: theme.typography.subtitle?.copyWith(
-                color: theme.inactiveColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              state.isPreviewMode 
-                  ? 'Switch to edit mode to modify block properties'
-                  : 'Select a block from the canvas to edit its properties',
-              style: theme.typography.body?.copyWith(
-                color: theme.inactiveColor,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            if (state.usedPlaceholders.isNotEmpty) ...[
               const SizedBox(height: 24),
-              _buildPreviewDataSection(context, theme, state),
+              Text(
+                state.isPreviewMode ? 'Preview Mode Active' : 'No Block Selected',
+                style: theme.typography.subtitle?.copyWith(
+                  color: theme.accentColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                state.isPreviewMode 
+                    ? 'Switch to edit mode to modify block properties'
+                    : 'Click on a block in the canvas to edit its properties',
+                style: theme.typography.body?.copyWith(
+                  color: theme.inactiveColor,
+                  fontSize: 12,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ],
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 32),
+        // Auto-save status panel
+        const AutoSaveStatusPanel(),
+        if (state.usedPlaceholders.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          _buildPreviewDataSection(context, theme, state),
+        ],
+        if (!state.isPreviewMode && state.blocks.isEmpty) ...[
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.accentColor.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: theme.accentColor.withValues(alpha: 0.15),
+              ),
+            ),
+            child: Column(
+              children: [
+                Icon(
+                  FluentIcons.lightbulb,
+                  size: 24,
+                  color: theme.accentColor,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Quick Start',
+                  style: theme.typography.bodyStrong?.copyWith(
+                    color: theme.accentColor,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Drag blocks from the toolbox to start building your template',
+                  style: theme.typography.caption?.copyWith(
+                    color: theme.inactiveColor,
+                    fontSize: 11,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1107,23 +1213,81 @@ class _EditorInspectorState extends ConsumerState<EditorInspector> {
     String title,
     List<Widget> children,
   ) {
-    return Column(
+  return Container(
+    margin: const EdgeInsets.only(bottom: 20),
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [
+          theme.cardColor.withValues(alpha: 0.8),
+          theme.cardColor.withValues(alpha: 0.6),
+        ],
+      ),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: theme.accentColor.withValues(alpha: 0.1),
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.05),
+          blurRadius: 4,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: theme.typography.bodyStrong?.copyWith(
-            color: theme.accentColor,
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.accentColor.withValues(alpha: 0.08),
+                theme.accentColor.withValues(alpha: 0.05),
+              ],
+            ),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(12),
+              topRight: Radius.circular(12),
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: theme.accentColor.withValues(alpha: 0.15),
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                _getSectionIcon(title),
+                size: 16,
+                color: theme.accentColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: theme.typography.bodyStrong?.copyWith(
+                  color: theme.accentColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
-        ...children.map((child) => Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: child,
-        )),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: children.map((child) => Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: child,
+            )).toList(),
+          ),
+        ),
       ],
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildTextInput(
     String label,
@@ -1411,5 +1575,38 @@ class _EditorInspectorState extends ConsumerState<EditorInspector> {
 
   void _updateBlock(WidgetRef ref, String blockId, Map<String, dynamic> properties) {
     ref.read(templateEditorProvider.notifier).updateBlock(blockId, properties);
+  }
+
+  IconData _getSectionIcon(String title) {
+    switch (title.toLowerCase()) {
+      case 'content':
+        return FluentIcons.edit;
+      case 'typography':
+        return FluentIcons.font_color_a;
+      case 'style':
+        return FluentIcons.color;
+      case 'appearance':
+        return FluentIcons.design;
+      case 'dimensions':
+        return FluentIcons.font_size;
+      case 'border & style':
+        return FluentIcons.border_dash;
+      case 'colors & style':
+        return FluentIcons.color_solid;
+      case 'size':
+        return FluentIcons.full_screen;
+      case 'list settings':
+        return FluentIcons.bulleted_list;
+      case 'list items':
+        return FluentIcons.list;
+      case 'qr code data':
+        return FluentIcons.q_r_code;
+      case 'layout':
+        return FluentIcons.p_b_i_home_layout_default;
+      case 'social links':
+        return FluentIcons.share;
+      default:
+        return FluentIcons.settings;
+    }
   }
 }

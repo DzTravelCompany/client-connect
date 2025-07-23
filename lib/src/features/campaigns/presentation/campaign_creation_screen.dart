@@ -1,18 +1,16 @@
+import 'package:client_connect/src/core/design_system/design_tokens.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show TimeOfDay, showDatePicker, showTimePicker;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
-import '../../clients/logic/client_providers.dart';
 import '../../templates/logic/template_providers.dart';
 import '../../clients/data/client_model.dart';
 import '../../templates/data/template_model.dart';
-import '../../tags/logic/tag_providers.dart';
-import '../../tags/data/tag_model.dart';
-import '../../tags/presentation/widgets/tag_chip.dart';
 import '../../templates/presentation/widgets/template_preview_dialog.dart';
 import '../logic/campaign_providers.dart';
+import 'widgets/smart_client_selector_modal.dart';
 
 
 class CampaignCreationScreen extends ConsumerStatefulWidget {
@@ -29,16 +27,9 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   final _searchController = TextEditingController();
   
   List<ClientModel> _selectedClients = [];
-  List<ClientModel> _filteredClients = [];
   TemplateModel? _selectedTemplate;
   DateTime? _scheduledDate;
   TimeOfDay? _scheduledTime;
-  
-  // Filter states
-  String _searchTerm = '';
-  final List<TagModel> _selectedTags = [];
-  String _companyFilter = '';
-  bool _showAdvancedFilters = false;
 
   Timer? _debounceTimer;
   late AnimationController _stepAnimationController;
@@ -357,44 +348,332 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   }
 
   Widget _buildEnhancedAudienceSelection() {
-    final clientsAsync = ref.watch(allClientsProvider);
-    final clientsWithTagsAsync = ref.watch(allClientsWithTagsProvider);
-    final tagsAsync = ref.watch(allTagsProvider);
-    
     return Padding(
       padding: const EdgeInsets.all(20),
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Enhanced header with statistics
+              _buildSectionHeader(
+                'Select Your Audience',
+                'Choose which clients will receive this campaign',
+                additionalWidget: _selectedClients.isNotEmpty
+                    ? _buildAudienceStats()
+                    : null,
+              ),
+              
+              const SizedBox(height: 24),
+              
+              // Client selection card with open modal button
+              _buildClientSelectionCard(),
+              
+              const SizedBox(height: 20),
+              
+              // Selected clients list (if any)
+              _selectedClients.isNotEmpty
+                ? _buildSelectedClientsList()
+                : _buildEmptySelectionState(),
+              
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClientSelectionCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Enhanced header with statistics
-          _buildSectionHeader(
-            'Select Your Audience',
-            'Choose which clients will receive this campaign',
-            additionalWidget: _selectedClients.isNotEmpty
-                ? _buildAudienceStats()
-                : null,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: FluentTheme.of(context).accentColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  FluentIcons.people_add,
+                  size: 24,
+                  color: FluentTheme.of(context).accentColor,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Select Clients',
+                      style: FluentTheme.of(context).typography.subtitle?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Choose which clients will receive this campaign',
+                      style: TextStyle(
+                        color: Colors.grey[100],
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           
           const SizedBox(height: 24),
           
-          // Enhanced search and filter section
-          _buildEnhancedSearchAndFilters(tagsAsync),
-          
-          const SizedBox(height: 20),
-          
-          // Quick selection actions
-          if (_filteredClients.isNotEmpty)
-            _buildQuickSelectionActions(),
-          
-          const SizedBox(height: 16),
-          
-          // Enhanced client list
-          Expanded(
-            child: clientsAsync.when(
-              data: (clients) => _buildEnhancedClientList(clients, clientsWithTagsAsync),
-              loading: () => _buildClientListSkeleton(),
-              error: (error, stack) => _buildErrorState('Failed to load clients: $error'),
+          // Client selection button
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _openClientSelectorModal,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(FluentIcons.people_add, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      _selectedClients.isEmpty
+                          ? 'Select Clients'
+                          : 'Add or Remove Clients',
+                    ),
+                  ],
+                ),
+              ),
             ),
+          ),
+          
+          if (_selectedClients.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 16),
+            
+            // Selection summary
+            Row(
+              children: [
+                Icon(
+                  FluentIcons.info,
+                  size: 16,
+                  color: Colors.grey[100],
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Selected ${_selectedClients.length} clients',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[100],
+                  ),
+                ),
+                const Spacer(),
+                Button(
+                  onPressed: () {
+                    setState(() => _selectedClients.clear());
+                  },
+                  child: const Text('Clear All'),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectedClientsList() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Selected Clients',
+          style: FluentTheme.of(context).typography.subtitle?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ListView.builder(
+          shrinkWrap: true,
+          itemCount: _selectedClients.length,
+          itemBuilder: (context, index) {
+            final client = _selectedClients[index];
+            return _buildSelectedClientCard(client);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSelectedClientCard(ClientModel client) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            // Client avatar
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: FluentTheme.of(context).accentColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Center(
+                child: Text(
+                  client.firstName.isNotEmpty ? client.firstName[0].toUpperCase() : '?',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: FluentTheme.of(context).accentColor,
+                  ),
+                ),
+              ),
+            ),
+            
+            const SizedBox(width: 12),
+            
+            // Client details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    client.fullName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      if (client.email != null) ...[
+                        Icon(
+                          FluentIcons.mail,
+                          size: 12,
+                          color: Colors.grey[100],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          client.email!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[100],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                      ],
+                      if (client.company != null) ...[
+                        Icon(
+                          FluentIcons.build,
+                          size: 12,
+                          color: Colors.grey[100],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          client.company!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[100],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            // Remove button
+            IconButton(
+              icon: Icon(
+                FluentIcons.cancel,
+                size: 16,
+                color: Colors.red,
+              ),
+              onPressed: () {
+                setState(() {
+                  _selectedClients.removeWhere((c) => c.id == client.id);
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptySelectionState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(40),
+            ),
+            child: Icon(
+              FluentIcons.people_add,
+              size: 40,
+              color: Colors.grey[200],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'No Clients Selected',
+            style: FluentTheme.of(context).typography.subtitle?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Click the "Select Clients" button to choose\nwho will receive this campaign',
+            style: TextStyle(
+              color: Colors.grey[100],
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: _openClientSelectorModal,
+            child: const Text('Select Clients'),
           ),
         ],
       ),
@@ -406,34 +685,38 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
     
     return Padding(
       padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Enhanced header
-          _buildSectionHeader(
-            'Choose Your Template',
-            'Select the message template for this campaign',
-            additionalWidget: _selectedTemplate != null
-                ? _buildTemplatePreviewButton()
-                : null,
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Enhanced header
+              _buildSectionHeader(
+                'Choose Your Template',
+                'Select the message template for this campaign',
+                additionalWidget: _selectedTemplate != null
+                    ? _buildTemplatePreviewButton()
+                    : null,
+              ),
+              
+              const SizedBox(height: 24),
+              
+              // Template type filter
+              _buildTemplateTypeFilter(),
+              
+              const SizedBox(height: 20),
+              
+              // Enhanced template list
+              templatesAsync.when(
+                data: (templates) => _buildEnhancedTemplateList(templates),
+                loading: () => _buildTemplateListSkeleton(),
+                error: (error, stack) => _buildErrorState('Failed to load templates: $error'),
+                
+              ),
+            ],
           ),
-          
-          const SizedBox(height: 24),
-          
-          // Template type filter
-          _buildTemplateTypeFilter(),
-          
-          const SizedBox(height: 20),
-          
-          // Enhanced template list
-          Expanded(
-            child: templatesAsync.when(
-              data: (templates) => _buildEnhancedTemplateList(templates),
-              loading: () => _buildTemplateListSkeleton(),
-              error: (error, stack) => _buildErrorState('Failed to load templates: $error'),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -550,511 +833,6 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
     );
   }
 
-  Widget _buildEnhancedSearchAndFilters(AsyncValue<List<TagModel>> tagsAsync) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[100]),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Enhanced search bar
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey[100]),
-                  ),
-                  child: TextBox(
-                    controller: _searchController,
-                    placeholder: 'Search clients by name, email, or company...',
-                    prefix: Container(
-                      padding: const EdgeInsets.all(8),
-                      child: Icon(FluentIcons.search, size: 16, color: Colors.grey[100]),
-                    ),
-                    onChanged: (value) {
-                      _debounceTimer?.cancel();
-                      _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-                        if (mounted) {
-                          setState(() => _searchTerm = value);
-                          _applyFilters();
-                        }
-                      });
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Filter toggle button
-              Container(
-                decoration: BoxDecoration(
-                  color: _showAdvancedFilters 
-                      ? FluentTheme.of(context).accentColor.withValues(alpha: 0.1)
-                      : Colors.grey[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: _showAdvancedFilters 
-                        ? FluentTheme.of(context).accentColor
-                        : Colors.grey[100],
-                  ),
-                ),
-                child: IconButton(
-                  icon: Icon(
-                    _showAdvancedFilters ? FluentIcons.filter_solid : FluentIcons.filter,
-                    size: 16,
-                  ),
-                  onPressed: () {
-                    setState(() => _showAdvancedFilters = !_showAdvancedFilters);
-                  },
-                ),
-              ),
-            ],
-          ),
-          
-          // Advanced filters with animation
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            height: _showAdvancedFilters ? null : 0,
-            child: _showAdvancedFilters ? Column(
-              children: [
-                const SizedBox(height: 20),
-                const Divider(),
-                const SizedBox(height: 20),
-                
-                // Tag filters
-                tagsAsync.when(
-                  data: (tags) => _buildTagFilters(tags),
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // Filter actions
-                _buildFilterActions(),
-              ],
-            ) : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTagFilters(List<TagModel> tags) {
-    if (tags.isEmpty) return const SizedBox.shrink();
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(FluentIcons.tag, size: 16, color: Colors.grey[100]),
-            const SizedBox(width: 8),
-            Text(
-              'Filter by tags:',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[200],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: tags.map((tag) {
-            final isSelected = _selectedTags.any((t) => t.id == tag.id);
-            return TagChip(
-              tag: tag,
-              size: TagChipSize.small,
-              isSelected: isSelected,
-              onTap: () {
-                setState(() {
-                  if (isSelected) {
-                    _selectedTags.removeWhere((t) => t.id == tag.id);
-                  } else {
-                    _selectedTags.add(tag);
-                  }
-                });
-                _applyFilters();
-              },
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFilterActions() {
-    return Row(
-      children: [
-        Button(
-          onPressed: _hasActiveFilters() ? () {
-            setState(() {
-              _searchController.clear();
-              _searchTerm = '';
-              _selectedTags.clear();
-              _companyFilter = '';
-            });
-            _applyFilters();
-          } : null,
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(FluentIcons.clear_filter, size: 14),
-              SizedBox(width: 4),
-              Text('Clear Filters'),
-            ],
-          ),
-        ),
-        const Spacer(),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            '${_filteredClients.length} clients match',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.blue,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQuickSelectionActions() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.blue.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Icon(FluentIcons.people, size: 16, color: Colors.blue),
-          const SizedBox(width: 8),
-          Text(
-            '${_selectedClients.length} of ${_filteredClients.length} clients selected',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Colors.blue,
-            ),
-          ),
-          const Spacer(),
-          Button(
-            onPressed: () {
-              setState(() => _selectedClients = List.from(_filteredClients));
-            },
-            child: const Text('Select All'),
-          ),
-          const SizedBox(width: 8),
-          Button(
-            onPressed: () {
-              setState(() => _selectedClients.clear());
-            },
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEnhancedClientList(List<ClientModel> clients, AsyncValue clientsWithTagsAsync) {
-    if (clients.isEmpty) {
-      return _buildEmptyState(
-        'No clients available',
-        'Add clients first to create campaigns',
-        FluentIcons.people_add,
-      );
-    }
-    
-    // Initialize filtered clients if needed
-    if (_filteredClients.isEmpty && _searchTerm.isEmpty && _selectedTags.isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        clientsWithTagsAsync.whenData((clientsWithTags) {
-          if (!mounted) return;
-          
-          final clientModels = clientsWithTags.map((clientWithTags) => ClientModel(
-            id: clientWithTags.id,
-            firstName: clientWithTags.firstName,
-            lastName: clientWithTags.lastName,
-            email: clientWithTags.email,
-            phone: clientWithTags.phone,
-            company: clientWithTags.company,
-            jobTitle: clientWithTags.jobTitle,
-            address: null,
-            notes: null,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          )).toList();
-          
-          if (mounted) {
-            setState(() => _filteredClients = clientModels);
-          }
-        });
-      });
-    }
-    
-    final displayClients = _filteredClients.isNotEmpty ? _filteredClients : clients;
-    
-    if (displayClients.isEmpty) {
-      return _buildEmptyState(
-        'No clients match your filters',
-        'Try adjusting your search criteria',
-        FluentIcons.search,
-      );
-    }
-    
-    return ListView.builder(
-      itemCount: displayClients.length,
-      itemBuilder: (context, index) => _buildEnhancedClientCard(displayClients[index]),
-    );
-  }
-
-  Widget _buildEnhancedClientCard(ClientModel client) {
-    final isSelected = _selectedClients.any((c) => c.id == client.id);
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          color: isSelected 
-              ? FluentTheme.of(context).accentColor.withValues(alpha: 0.1)
-              : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected 
-                ? FluentTheme.of(context).accentColor
-                : Colors.grey[100],
-            width: isSelected ? 2 : 1,
-          ),
-          boxShadow: isSelected ? [
-            BoxShadow(
-              color: FluentTheme.of(context).accentColor.withValues(alpha: 0.2),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ] : [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: HoverButton(
-            onPressed: () {
-              setState(() {
-                if (isSelected) {
-                  _selectedClients.removeWhere((c) => c.id == client.id);
-                } else {
-                  _selectedClients.add(client);
-                }
-              });
-            },
-            builder: (context, states) {
-              return Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    // Enhanced checkbox
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: isSelected 
-                            ? FluentTheme.of(context).accentColor
-                            : Colors.transparent,
-                        border: Border.all(
-                          color: isSelected 
-                              ? FluentTheme.of(context).accentColor
-                              : Colors.grey[150],
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: isSelected
-                          ? const Icon(FluentIcons.check_mark, color: Colors.white, size: 14)
-                          : null,
-                    ),
-                    
-                    const SizedBox(width: 16),
-                    
-                    // Client avatar
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: FluentTheme.of(context).accentColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Center(
-                        child: Text(
-                          client.firstName.isNotEmpty ? client.firstName[0].toUpperCase() : '?',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: FluentTheme.of(context).accentColor,
-                          ),
-                        ),
-                      ),
-                    ),
-                    
-                    const SizedBox(width: 16),
-                    
-                    // Client details
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            client.fullName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          if (client.email != null)
-                            _buildClientDetailRow(FluentIcons.mail, client.email!),
-                          if (client.phone != null)
-                            _buildClientDetailRow(FluentIcons.phone, client.phone!),
-                          if (client.company != null)
-                            _buildClientDetailRow(FluentIcons.build, client.company!),
-                        ],
-                      ),
-                    ),
-                    
-                    // Selection indicator
-                    if (isSelected)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: FluentTheme.of(context).accentColor,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          'Selected',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            }
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildClientDetailRow(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Row(
-        children: [
-          Icon(icon, size: 12, color: Colors.grey[100]),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[100],
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildClientListSkeleton() {
-    return ListView.builder(
-      itemCount: 5,
-      itemBuilder: (context, index) => Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(20),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    height: 16,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    height: 12,
-                    width: 200,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildTemplatePreviewButton() {
     return Button(
       onPressed: () => _showTemplatePreview(_selectedTemplate!),
@@ -1073,7 +851,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: DesignTokens.neutralWhite,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey[200]),
       ),
@@ -1125,6 +903,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
     }
     
     return ListView.builder(
+      shrinkWrap: true,
       itemCount: templates.length,
       itemBuilder: (context, index) => _buildEnhancedTemplateCard(templates[index]),
     );
@@ -1299,6 +1078,7 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
   Widget _buildTemplateListSkeleton() {
     return ListView.builder(
       itemCount: 3,
+      shrinkWrap: true,
       itemBuilder: (context, index) => Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(20),
@@ -2124,66 +1904,6 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
     }
   }
 
-  void _applyFilters() {
-    try {
-      final clientsWithTagsAsync = ref.read(allClientsWithTagsProvider);
-      clientsWithTagsAsync.whenData((clientsWithTags) {
-        if (!mounted) return;
-        
-        List<ClientWithTags> filtered = clientsWithTags;
-        
-        // Apply search filter
-        if (_searchTerm.isNotEmpty) {
-          filtered = filtered.where((clientWithTags) {
-            final searchLower = _searchTerm.toLowerCase();
-            return clientWithTags.fullName.toLowerCase().contains(searchLower) ||
-                 (clientWithTags.email?.toLowerCase().contains(searchLower) ?? false) ||
-                 (clientWithTags.company?.toLowerCase().contains(searchLower) ?? false);
-          }).toList();
-        }
-        
-        // Apply tag filters - client must have ALL selected tags (AND logic)
-        if (_selectedTags.isNotEmpty) {
-          filtered = filtered.where((clientWithTags) {
-            // Check if client has all selected tags
-            final clientTagIds = clientWithTags.tags.map((tag) => tag.id).toSet();
-            final selectedTagIds = _selectedTags.map((tag) => tag.id).toSet();
-            
-            // Client must have all selected tags
-            return selectedTagIds.every((tagId) => clientTagIds.contains(tagId));
-          }).toList();
-        }
-        
-        // Convert ClientWithTags back to ClientModel for UI compatibility
-        final filteredClientModels = filtered.map((clientWithTags) => ClientModel(
-          id: clientWithTags.id,
-          firstName: clientWithTags.firstName,
-          lastName: clientWithTags.lastName,
-          email: clientWithTags.email,
-          phone: clientWithTags.phone,
-          company: clientWithTags.company,
-          jobTitle: clientWithTags.jobTitle,
-          address: null,
-          notes: null,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        )).toList();
-        
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() => _filteredClients = filteredClientModels);
-          }
-        });
-      });
-    } catch (e) {
-      // Silently handle any ref-related errors during filtering
-    }
-  }
-
-  bool _hasActiveFilters() {
-    return _searchTerm.isNotEmpty || _selectedTags.isNotEmpty || _companyFilter.isNotEmpty;
-  }
-
   bool _canProceedToNext() {
     switch (_currentStep) {
       case 0:
@@ -2290,6 +2010,23 @@ class _CampaignCreationScreenState extends ConsumerState<CampaignCreationScreen>
         templateSubject: template.subject ?? '',
         templateType: template.templateType,
         blocks: template.blocks,
+      ),
+    );
+  }
+
+  void _openClientSelectorModal() {
+    showDialog(
+      context: context,
+      builder: (context) => SmartClientSelectorModal(
+        initialSelectedClients: _selectedClients,
+        campaignContext: _campaignNameController.text.isNotEmpty 
+            ? _campaignNameController.text 
+            : _selectedTemplate?.name,
+        onConfirm: (selectedClients) {
+          setState(() => _selectedClients = selectedClients);
+          Navigator.pop(context);
+        },
+        onCancel: () => Navigator.pop(context),
       ),
     );
   }

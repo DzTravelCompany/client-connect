@@ -1,119 +1,103 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import '../../../../core/design_system/design_tokens.dart';
+import '../../../../core/design_system/component_library.dart';
 
 class MetricCard extends StatelessWidget {
   final String title;
   final String value;
   final String? subtitle;
   final IconData icon;
-  final Color? iconColor;
+  final Color iconColor;
   final String? trend;
-  final bool isPositiveTrend;
-  final VoidCallback? onTap;
+  final bool? isPositiveTrend;
 
   const MetricCard({
     super.key,
     required this.title,
     required this.value,
-    required this.icon,
     this.subtitle,
-    this.iconColor,
+    required this.icon,
+    required this.iconColor,
     this.trend,
-    this.isPositiveTrend = true,
-    this.onTap,
+    this.isPositiveTrend,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-    
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: (iconColor ?? theme.accentColor).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
+    return DesignSystemComponents.glassmorphismCard(
+      padding: EdgeInsets.all(DesignTokens.space4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(DesignTokens.space2),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      iconColor.withValues(alpha: 0.15),
+                      iconColor.withValues(alpha: 0.08),
+                    ],
                   ),
-                  child: Icon(
-                    icon,
-                    size: 20,
-                    color: iconColor ?? theme.accentColor,
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                  border: Border.all(
+                    color: iconColor.withValues(alpha: 0.3),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: iconColor.withValues(alpha: 0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-                if (trend != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isPositiveTrend 
-                          ? Colors.green.withValues(alpha: 0.1)
-                          : Colors.red.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isPositiveTrend 
-                              ? FluentIcons.up 
-                              : FluentIcons.down,
-                          size: 12,
-                          color: isPositiveTrend ? Colors.green : Colors.red,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          trend!,
-                          style: theme.typography.caption?.copyWith(
-                            color: isPositiveTrend ? Colors.green : Colors.red,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                child: Icon(
+                  icon,
+                  size: DesignTokens.iconSizeMedium,
+                  color: iconColor,
+                ),
+              ),
+              const Spacer(),
+              if (trend != null) ...[
+                DesignSystemComponents.statusBadge(
+                  text: trend!,
+                  type: isPositiveTrend == true 
+                      ? SemanticColorType.success 
+                      : SemanticColorType.error,
+                  icon: isPositiveTrend == true 
+                      ? FluentIcons.up 
+                      : FluentIcons.down,
+                ),
               ],
-            ),
-            
-            const SizedBox(height: 16),
-            
-            Text(
-              value,
-              style: theme.typography.titleLarge?.copyWith(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            
-            const SizedBox(height: 4),
-            
-            Text(
-              title,
-              style: theme.typography.body?.copyWith(
-                color: theme.resources.textFillColorSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                subtitle!,
-                style: theme.typography.caption?.copyWith(
-                  color: theme.resources.textFillColorTertiary,
-                ),
-              ),
             ],
+          ),
+          SizedBox(height: DesignTokens.space4),
+          Text(
+            value,
+            style: DesignTextStyles.display.copyWith(
+              fontWeight: DesignTokens.fontWeightBold,
+              color: DesignTokens.textPrimary,
+            ),
+          ),
+          SizedBox(height: DesignTokens.space1),
+          Text(
+            title,
+            style: DesignTextStyles.bodyLarge.copyWith(
+              color: DesignTokens.textSecondary,
+              fontWeight: DesignTokens.fontWeightMedium,
+            ),
+          ),
+          if (subtitle != null) ...[
+            SizedBox(height: DesignTokens.space1),
+            Text(
+              subtitle!,
+              style: DesignTextStyles.caption.copyWith(
+                color: DesignTokens.textTertiary,
+              ),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }

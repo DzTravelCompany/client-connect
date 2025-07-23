@@ -1,4 +1,5 @@
 import 'package:client_connect/src/core/models/database.dart';
+import 'package:client_connect/src/features/clients/logic/client_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart';
 import '../data/tag_dao.dart';
@@ -58,12 +59,12 @@ final tagUsageStatsProvider = FutureProvider<Map<int, int>>((ref) {
 
 // Tag form state provider
 final tagFormProvider = StateNotifierProvider<TagFormNotifier, TagFormState>((ref) {
-  return TagFormNotifier(ref.watch(tagDaoProvider));
+  return TagFormNotifier(ref.watch(tagDaoProvider), ref);
 });
 
 // Tag management state provider
 final tagManagementProvider = StateNotifierProvider<TagManagementNotifier, TagManagementState>((ref) {
-  return TagManagementNotifier(ref.watch(tagDaoProvider));
+  return TagManagementNotifier(ref.watch(tagDaoProvider), ref);
 });
 
 // Tag form state
@@ -127,8 +128,9 @@ class TagManagementState {
 // Tag form notifier
 class TagFormNotifier extends StateNotifier<TagFormState> {
   final TagDao _dao;
+  final Ref _ref;
 
-  TagFormNotifier(this._dao) : super(const TagFormState());
+  TagFormNotifier(this._dao, this._ref) : super(const TagFormState());
 
   Future<void> saveTag(TagModel tag) async {
     state = state.copyWith(isLoading: true, error: null);
@@ -148,6 +150,13 @@ class TagFormNotifier extends StateNotifier<TagFormState> {
           color: Value(tag.color),
           description: Value(tag.description),
         ));
+      }
+      
+      // Invalidate all tag-related providers
+      _ref.invalidate(allTagsProvider);
+      _ref.invalidate(tagUsageStatsProvider);
+      if (tag.id != 0) {
+        _ref.invalidate(tagByIdProvider(tag.id));
       }
       
       state = state.copyWith(isLoading: false, isSaved: true);
@@ -171,8 +180,9 @@ class TagFormNotifier extends StateNotifier<TagFormState> {
 // Tag management notifier
 class TagManagementNotifier extends StateNotifier<TagManagementState> {
   final TagDao _dao;
+  final Ref _ref;
 
-  TagManagementNotifier(this._dao) : super(const TagManagementState());
+  TagManagementNotifier(this._dao, this._ref) : super(const TagManagementState());
 
   void selectClient(int clientId) {
     final selected = List<int>.from(state.selectedClients);
@@ -216,6 +226,9 @@ class TagManagementNotifier extends StateNotifier<TagManagementState> {
         await _dao.addTagToMultipleClients(state.selectedClients, tagId);
       }
 
+      // Invalidate all relevant providers
+      _invalidateTagRelatedProviders();
+
       state = state.copyWith(
         isLoading: false,
         successMessage: 'Tags added to ${state.selectedClients.length} clients',
@@ -244,6 +257,9 @@ class TagManagementNotifier extends StateNotifier<TagManagementState> {
         await _dao.removeTagFromMultipleClients(state.selectedClients, tagId);
       }
 
+      // Invalidate all relevant providers
+      _invalidateTagRelatedProviders();
+
       state = state.copyWith(
         isLoading: false,
         successMessage: 'Tags removed from ${state.selectedClients.length} clients',
@@ -259,6 +275,27 @@ class TagManagementNotifier extends StateNotifier<TagManagementState> {
       });
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  void _invalidateTagRelatedProviders() {
+    // Invalidate tag providers
+    _ref.invalidate(allTagsProvider);
+    _ref.invalidate(tagUsageStatsProvider);
+    _ref.invalidate(allClientsWithTagsProvider);
+    
+    // Invalidate client providers that might show tags
+    _ref.invalidate(allClientsProvider);
+    
+    // Invalidate specific client tag providers for affected clients
+    for (final clientId in state.selectedClients) {
+      _ref.invalidate(tagsForClientProvider(clientId));
+      _ref.invalidate(clientTagsProvider(clientId));
+    }
+    
+    // Invalidate clients with tags provider for affected tags
+    for (final tagId in state.selectedTags) {
+      _ref.invalidate(clientsWithTagsProvider([tagId]));
     }
   }
 

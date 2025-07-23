@@ -1,7 +1,7 @@
 import 'package:client_connect/src/features/templates/data/template_block_model.dart';
 import 'package:client_connect/src/features/templates/logic/tempalte_editor_providers.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/material.dart' show Material;
+import 'package:flutter/material.dart' show Material, BoxDecoration, BoxShadow, Offset, BorderRadius, BoxShape;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class EditorToolbox extends ConsumerWidget {
@@ -12,82 +12,131 @@ class EditorToolbox extends ConsumerWidget {
     final theme = FluentTheme.of(context);
     final editorState = ref.watch(templateEditorProvider);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: theme.accentColor,
-                width: 1,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            theme.cardColor.withValues(alpha: 0.95),
+            theme.cardColor.withValues(alpha: 0.85),
+          ],
+        ),
+        border: Border(
+          right: BorderSide(
+            color: theme.accentColor.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(2, 0),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: theme.accentColor.withValues(alpha: 0.15),
+                  width: 1,
+                ),
               ),
             ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.accentColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.accentColor.withValues(alpha: 0.15),
+                        theme.accentColor.withValues(alpha: 0.08),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.accentColor.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Icon(
+                    FluentIcons.toolbox,
+                    size: 20,
+                    color: theme.accentColor,
+                  ),
                 ),
-                child: Icon(
-                  FluentIcons.toolbox,
-                  size: 20,
-                  color: theme.accentColor,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Block Library',
+                        style: theme.typography.subtitle?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Drag blocks to canvas',
+                        style: theme.typography.caption?.copyWith(
+                          color: theme.inactiveColor,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Toolbox',
-                style: theme.typography.subtitle,
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              _buildToolboxSection(
-                context,
-                ref,
-                'Content Blocks',
-                _getContentBlocks(editorState.templateType),
-              ),
-              const SizedBox(height: 24),
-              _buildToolboxSection(
-                context,
-                ref,
-                'Layout Elements',
-                _getLayoutBlocks(editorState.templateType),
-              ),
-              if (editorState.templateType == TemplateType.email) ...[
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                _buildToolboxSection(
+                  context,
+                  ref,
+                  'Content Blocks',
+                  _getContentBlocks(editorState.templateType),
+                ),
                 const SizedBox(height: 24),
                 _buildToolboxSection(
                   context,
                   ref,
-                  'Interactive Elements',
-                  _getInteractiveBlocks(),
+                  'Layout Elements',
+                  _getLayoutBlocks(editorState.templateType),
                 ),
-              ],
-              if (editorState.templateType == TemplateType.whatsapp) ...[
+                if (editorState.templateType == TemplateType.email) ...[
+                  const SizedBox(height: 24),
+                  _buildToolboxSection(
+                    context,
+                    ref,
+                    'Interactive Elements',
+                    _getInteractiveBlocks(),
+                  ),
+                ],
+                if (editorState.templateType == TemplateType.whatsapp) ...[
+                  const SizedBox(height: 24),
+                  _buildToolboxSection(
+                    context,
+                    ref,
+                    'WhatsApp Specific',
+                    _getWhatsAppBlocks(),
+                  ),
+                ],
                 const SizedBox(height: 24),
-                _buildToolboxSection(
-                  context,
-                  ref,
-                  'WhatsApp Specific',
-                  _getWhatsAppBlocks(),
-                ),
+                _buildPlaceholderSection(context, ref, editorState),
               ],
-              const SizedBox(height: 24),
-              _buildPlaceholderSection(context, ref, editorState),
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -389,14 +438,24 @@ class EditorToolbox extends ConsumerWidget {
         feedback: Material(
           color: Colors.transparent,
           child: Container(
-            width: 250,
-            padding: const EdgeInsets.all(12),
+            width: 280,
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: theme.accentColor.withValues(alpha: 0.9),
-              borderRadius: BorderRadius.circular(8),
+              gradient: LinearGradient(
+                colors: [
+                  theme.accentColor.withValues(alpha: 0.95),
+                  theme.accentColor.withValues(alpha: 0.85),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: theme.accentColor.withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),
@@ -405,17 +464,42 @@ class EditorToolbox extends ConsumerWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  item.icon,
-                  size: 16,
-                  color: Colors.white,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  item.title,
-                  style: const TextStyle(
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    item.icon,
+                    size: 18,
                     color: Colors.white,
-                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        item.description,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -423,7 +507,7 @@ class EditorToolbox extends ConsumerWidget {
           ),
         ),
         childWhenDragging: Opacity(
-          opacity: 0.5,
+          opacity: 0.3,
           child: _buildItemContent(context, theme, item),
         ),
         onDragStarted: () {
@@ -458,34 +542,70 @@ class EditorToolbox extends ConsumerWidget {
     final isHovering = states?.contains(WidgetState.hovered) ?? false;
     
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isHovering
-            ? theme.accentColor.withValues(alpha: 0.08)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+        gradient: isHovering
+            ? LinearGradient(
+                colors: [
+                  theme.accentColor.withValues(alpha: 0.12),
+                  theme.accentColor.withValues(alpha: 0.08),
+                ],
+              )
+            : LinearGradient(
+                colors: [
+                  theme.cardColor.withValues(alpha: 0.8),
+                  theme.cardColor.withValues(alpha: 0.6),
+                ],
+              ),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isHovering
-              ? theme.accentColor.withValues(alpha: 0.2)
-              : theme.accentColor.withValues(alpha: 0.5),
+              ? theme.accentColor.withValues(alpha: 0.3)
+              : theme.accentColor.withValues(alpha: 0.1),
           width: 1,
         ),
+        boxShadow: isHovering
+            ? [
+                BoxShadow(
+                  color: theme.accentColor.withValues(alpha: 0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: isHovering
-                  ? theme.accentColor.withValues(alpha: 0.15)
-                  : theme.accentColor.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
+              gradient: LinearGradient(
+                colors: isHovering
+                    ? [
+                        theme.accentColor.withValues(alpha: 0.2),
+                        theme.accentColor.withValues(alpha: 0.15),
+                      ]
+                    : [
+                        theme.accentColor.withValues(alpha: 0.12),
+                        theme.accentColor.withValues(alpha: 0.08),
+                      ]
+              ),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: theme.accentColor.withValues(alpha: 0.2),
+              ),
             ),
             child: Icon(
               item.icon,
-              size: 18,
+              size: 20,
               color: theme.accentColor,
             ),
           ),
@@ -498,14 +618,16 @@ class EditorToolbox extends ConsumerWidget {
                   item.title,
                   style: theme.typography.bodyStrong?.copyWith(
                     fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
                   item.description,
                   style: theme.typography.caption?.copyWith(
                     color: theme.inactiveColor,
                     fontSize: 11,
+                    height: 1.3,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -513,12 +635,16 @@ class EditorToolbox extends ConsumerWidget {
               ],
             ),
           ),
-          if (isHovering)
-            Icon(
-              FluentIcons.add,
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            child: Icon(
+              isHovering ? FluentIcons.add : FluentIcons.drag_object,
               size: 16,
-              color: theme.accentColor,
+              color: isHovering 
+                  ? theme.accentColor 
+                  : theme.inactiveColor,
             ),
+          ),
         ],
       ),
     );

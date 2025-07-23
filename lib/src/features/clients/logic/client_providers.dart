@@ -50,7 +50,7 @@ final clientByIdProvider = FutureProvider.family<ClientModel?, int>((ref, id) {
 
 // Client form state provider
 final clientFormProvider = StateNotifierProvider<ClientFormNotifier, ClientFormState>((ref) {
-  return ClientFormNotifier(ref.watch(clientDaoProvider));
+  return ClientFormNotifier(ref.watch(clientDaoProvider), ref);
 });
 
 // Client companies provider - gets all unique companies from clients
@@ -103,8 +103,9 @@ class ClientFormState {
 // Client form notifier
 class ClientFormNotifier extends StateNotifier<ClientFormState> {
   final ClientDao _dao;
+  final Ref _ref;
 
-  ClientFormNotifier(this._dao) : super(const ClientFormState());
+  ClientFormNotifier(this._dao, this._ref) : super(const ClientFormState());
 
   Future<void> saveClient(ClientModel client) async {
     state = state.copyWith(isLoading: true, error: null);
@@ -134,6 +135,13 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> {
           address: Value(client.address),
           notes: Value(client.notes),
         ));
+      }
+      
+      // Invalidate all client-related providers to force refresh
+      _ref.invalidate(allClientsProvider);
+      _ref.invalidate(clientCompaniesProvider);
+      if (client.id != 0) {
+        _ref.invalidate(clientByIdProvider(client.id));
       }
       
       state = state.copyWith(isLoading: false, isSaved: true);

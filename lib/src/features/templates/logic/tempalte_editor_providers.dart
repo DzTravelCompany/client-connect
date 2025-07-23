@@ -1,4 +1,6 @@
 import 'package:client_connect/src/features/templates/data/template_block_model.dart';
+import 'package:client_connect/src/features/templates/data/template_model.dart';
+import 'package:client_connect/src/features/templates/logic/auto_save_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -16,6 +18,10 @@ class TemplateEditorState {
   final DateTime? createdAt;
   final bool isPreviewMode;
   final Map<String, String> previewData;
+  final bool isAutoSaveEnabled;
+  final DateTime? lastAutoSaved;
+  final bool isAutoSaving;
+  final String? autoSaveError;
 
   const TemplateEditorState({
     this.blocks = const [],
@@ -31,6 +37,10 @@ class TemplateEditorState {
     this.createdAt,
     this.isPreviewMode = false,
     this.previewData = const {},
+    this.isAutoSaveEnabled = true,
+    this.lastAutoSaved,
+    this.isAutoSaving = false,
+    this.autoSaveError,
   });
 
   TemplateEditorState copyWith({
@@ -47,6 +57,10 @@ class TemplateEditorState {
     DateTime? createdAt,
     bool? isPreviewMode,
     Map<String, String>? previewData,
+    bool? isAutoSaveEnabled,
+    DateTime? lastAutoSaved,
+    bool? isAutoSaving,
+    String? autoSaveError,
   }) {
     return TemplateEditorState(
       blocks: blocks ?? this.blocks,
@@ -62,6 +76,10 @@ class TemplateEditorState {
       createdAt: createdAt ?? this.createdAt,
       isPreviewMode: isPreviewMode ?? this.isPreviewMode,
       previewData: previewData ?? this.previewData,
+      isAutoSaveEnabled: isAutoSaveEnabled ?? this.isAutoSaveEnabled,
+      lastAutoSaved: lastAutoSaved ?? this.lastAutoSaved,
+      isAutoSaving: isAutoSaving ?? this.isAutoSaving,
+      autoSaveError: autoSaveError ?? this.autoSaveError,
     );
   }
 
@@ -86,6 +104,27 @@ class TemplateEditorState {
   // Get all placeholders used in the template
   Set<String> get usedPlaceholders {
     return PlaceholderManager.extractPlaceholdersFromBlocks(blocks);
+  }
+
+  // Get auto-save status text
+  String get autoSaveStatusText {
+    if (isAutoSaving) {
+      return 'Saving...';
+    } else if (autoSaveError != null) {
+      return 'Save failed';
+    } else if (lastAutoSaved != null) {
+      final now = DateTime.now();
+      final diff = now.difference(lastAutoSaved!);
+      if (diff.inMinutes < 1) {
+        return 'Saved just now';
+      } else if (diff.inMinutes < 60) {
+        return 'Saved ${diff.inMinutes}m ago';
+      } else {
+        return 'Saved ${diff.inHours}h ago';
+      }
+    } else {
+      return 'Not saved';
+    }
   }
 
   TemplateBlock _createDummyBlock(TemplateBlockType type) {
@@ -123,8 +162,10 @@ class TemplateEditorState {
 
 class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
   static const _uuid = Uuid();
+  final AutoSaveService? _autoSaveService;
+  int? _templateId;
 
-  TemplateEditorNotifier() : super(const TemplateEditorState()) {
+  TemplateEditorNotifier([this._autoSaveService]) : super(const TemplateEditorState()) {
     _addToHistory([]);
     // Initialize with sample data
     state = state.copyWith(previewData: PlaceholderManager.getAllSampleData());
@@ -145,6 +186,46 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
     );
   }
 
+  void _triggerAutoSave() {
+    if (!state.isAutoSaveEnabled || _autoSaveService == null || _templateId == null) {
+      return;
+    }
+
+    final template = TemplateModel(
+      id: _templateId!,
+      name: state.templateName.trim(),
+      subject: state.templateType == TemplateType.email ? state.templateSubject.trim() : null,
+      body: '',
+      templateType: state.templateType,
+      blocks: state.blocks,
+      isEmail: state.templateType == TemplateType.email,
+      createdAt: state.createdAt ?? DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    // Validate before auto-saving
+    final validationErrors = template.validate();
+    if (validationErrors.isEmpty && template.name.isNotEmpty) {
+      state = state.copyWith(isAutoSaving: true, autoSaveError: null);
+      
+      _autoSaveService.scheduleAutoSave(template);
+      
+      // Simulate auto-save completion (in real implementation, this would be handled by the service)
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) {
+          state = state.copyWith(
+            isAutoSaving: false,
+            lastAutoSaved: DateTime.now(),
+          );
+        }
+      });
+    }
+  }
+
+  void setTemplateId(int? templateId) {
+    _templateId = templateId;
+  }
+
   void setTemplateType(TemplateType type) {
     if (state.templateType == type) return;
     
@@ -162,6 +243,8 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
           : null,
       isDirty: true,
     );
+    
+    _triggerAutoSave();
   }
 
   void setTemplateInfo({String? name, String? subject}) {
@@ -170,6 +253,8 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
       templateSubject: subject ?? state.templateSubject,
       isDirty: true,
     );
+    
+    _triggerAutoSave();
   }
 
   void addBlock(TemplateBlock block, {int? index}) {
@@ -191,6 +276,8 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
       selectedBlockId: block.id,
       isDirty: true,
     );
+    
+    _triggerAutoSave();
   }
 
   void removeBlock(String blockId) {
@@ -207,6 +294,8 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
       selectedBlockId: state.selectedBlockId == blockId ? null : state.selectedBlockId,
       isDirty: true,
     );
+    
+    _triggerAutoSave();
   }
 
   void updateBlock(String blockId, Map<String, dynamic> properties) {
@@ -222,6 +311,8 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
       blocks: newBlocks,
       isDirty: true,
     );
+    
+    _triggerAutoSave();
   }
 
   void reorderBlocks(int oldIndex, int newIndex) {
@@ -242,6 +333,8 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
       blocks: newBlocks,
       isDirty: true,
     );
+    
+    _triggerAutoSave();
   }
 
   void moveBlock(String blockId, int targetIndex) {
@@ -293,6 +386,15 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
   // Update preview data
   void updatePreviewData(Map<String, String> data) {
     state = state.copyWith(previewData: data);
+  }
+
+  // Toggle auto-save
+  void toggleAutoSave() {
+    state = state.copyWith(isAutoSaveEnabled: !state.isAutoSaveEnabled);
+    
+    if (!state.isAutoSaveEnabled) {
+      _autoSaveService?.cancelAutoSave();
+    }
   }
 
   TemplateBlock _duplicateBlock(TemplateBlock original) {
@@ -360,6 +462,8 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
       historyIndex: newIndex,
       isDirty: true,
     );
+    
+    _triggerAutoSave();
   }
 
   void redo() {
@@ -371,6 +475,8 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
       historyIndex: newIndex,
       isDirty: true,
     );
+    
+    _triggerAutoSave();
   }
 
   void loadTemplate({
@@ -378,7 +484,9 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
     required TemplateType templateType,
     String? templateName,
     String? templateSubject,
+    int? templateId,
   }) {
+    _templateId = templateId;
     _addToHistory(blocks);
     state = state.copyWith(
       blocks: blocks,
@@ -428,7 +536,10 @@ class TemplateEditorNotifier extends StateNotifier<TemplateEditorState> {
 }
 
 final templateEditorProvider = StateNotifierProvider<TemplateEditorNotifier, TemplateEditorState>(
-  (ref) => TemplateEditorNotifier(),
+  (ref) {
+    final autoSaveService = ref.watch(autoSaveServiceProvider);
+    return TemplateEditorNotifier(autoSaveService);
+  },
 );
 
 // Provider for drag and drop state

@@ -6,8 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/client_model.dart';
 import '../../../tags/logic/tag_providers.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/design_system/design_tokens.dart';
+import '../../../../core/design_system/component_library.dart';
 
-// 1. Change to ConsumerStatefulWidget
 class EnhancedClientCard extends ConsumerStatefulWidget {
   final ClientModel client;
   final bool isSelected;
@@ -29,7 +30,6 @@ class EnhancedClientCard extends ConsumerStatefulWidget {
 }
 
 class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
-  // 2. Add FlyoutController
   late final FlyoutController _moreActionsFlyoutController;
 
   @override
@@ -46,195 +46,182 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
 
   @override
   Widget build(BuildContext context) {
-    // 6. Access widget properties via widget.client, widget.isSelected, etc.
-    final theme = FluentTheme.of(context);
     final clientTagsAsync = ref.watch(clientTagsProvider(widget.client.id));
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Card(
-        backgroundColor: widget.isSelected
-            ? theme.accentColor.withValues(alpha: 0.1)
-            : theme.cardColor,
-        borderColor: widget.isSelected
-            ? theme.accentColor.withValues(alpha: 0.3)
-            : theme.resources.dividerStrokeColorDefault.withValues(alpha: 0.3),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                color: Colors.transparent,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header row with avatar and selection
-                  Row(
-                    children: [
-                      // Selection checkbox
-                      if (widget.showSelection) ...[
-                        Checkbox(
-                          checked: widget.isSelected,
-                          onChanged: (checked) =>
-                              widget.onSelectionChanged(checked ?? false),
-                        ),
-                        const SizedBox(width: 12),
-                      ],
-                      // Avatar
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: theme.accentColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: theme.accentColor.withValues(alpha: 0.3),
-                            width: 2,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            _getInitials(widget.client.fullName),
-                            style: TextStyle(
-                              color: theme.accentColor,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Client info
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.client.fullName,
-                              style: theme.typography.bodyStrong?.copyWith(
-                                fontSize: 16,
-                              ),
-                            ),
-                            // Typo fix: client.client.company -> client.company
-                            if (widget.client.jobTitle != null &&
-                                widget.client.company != null) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                '${widget.client.jobTitle} at ${widget.client.company}',
-                                style: theme.typography.body?.copyWith(
-                                  color: theme.resources.textFillColorSecondary,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ] else if (widget.client.company != null) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                widget.client.company!,
-                                style: theme.typography.body?.copyWith(
-                                  color: theme.resources.textFillColorSecondary,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      // Status indicator
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(widget.client),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
+      margin: EdgeInsets.only(bottom: DesignTokens.space3),
+      child: DesignSystemComponents.standardCard(
+        onTap: widget.onTap,
+        isSelected: widget.isSelected,
+        isHoverable: true,
+        padding: EdgeInsets.all(DesignTokens.space4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row with avatar and selection
+            Row(
+              children: [
+                // Selection checkbox
+                if (widget.showSelection) ...[
+                  Checkbox(
+                    checked: widget.isSelected,
+                    onChanged: (checked) =>
+                        widget.onSelectionChanged(checked ?? false),
                   ),
-                  const SizedBox(height: 12),
-                  // Contact information
-                  Row(
+                  SizedBox(width: DesignTokens.space3),
+                ],
+                // Avatar with design system styling
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        DesignTokens.accentPrimary.withValues(alpha: 0.15),
+                        DesignTokens.accentPrimary.withValues(alpha: 0.08),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(DesignTokens.radiusRound),
+                    border: Border.all(
+                      color: DesignTokens.accentPrimary.withValues(alpha: 0.3),
+                      width: 2,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      _getInitials(widget.client.fullName),
+                      style: DesignTextStyles.body.copyWith(
+                        color: DesignTokens.accentPrimary,
+                        fontWeight: DesignTokens.fontWeightBold,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: DesignTokens.space3),
+                // Client info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (widget.client.email != null) ...[
-                        Expanded(
-                          child: _buildContactInfo(
-                            FluentIcons.mail,
-                            widget.client.email!,
-                            theme,
+                      Text(
+                        widget.client.fullName,
+                        style: DesignTextStyles.subtitle.copyWith(
+                          fontWeight: DesignTokens.fontWeightBold,
+                        ),
+                      ),
+                      if (widget.client.jobTitle != null &&
+                          widget.client.company != null) ...[
+                        SizedBox(height: DesignTokens.space1),
+                        Text(
+                          '${widget.client.jobTitle} at ${widget.client.company}',
+                          style: DesignTextStyles.body.copyWith(
+                            color: DesignTokens.textSecondary,
                           ),
                         ),
-                      ],
-                      if (widget.client.phone != null) ...[
-                        if (widget.client.email != null)
-                          const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildContactInfo(
-                            FluentIcons.phone,
-                            widget.client.phone!,
-                            theme,
+                      ] else if (widget.client.company != null) ...[
+                        SizedBox(height: DesignTokens.space1),
+                        Text(
+                          widget.client.company!,
+                          style: DesignTextStyles.body.copyWith(
+                            color: DesignTokens.textSecondary,
                           ),
                         ),
                       ],
                     ],
                   ),
-                  // Tags
-                  clientTagsAsync.when(
-                    data: (tags) => tags.isNotEmpty
-                        ? Column(
-                            children: [
-                              const SizedBox(height: 12),
-                              _buildTagsRow(tags, theme),
-                            ],
-                          )
-                        : const SizedBox.shrink(),
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
-                  ),
-                  const SizedBox(height: 12),
-                  // Footer with last updated and quick actions
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          'Updated ${_formatRelativeDate(widget.client.updatedAt)}',
-                          style: theme.typography.caption?.copyWith(
-                            color: theme.resources.textFillColorTertiary,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildQuickActions(theme, context),
-                    ],
+                ),
+                // Status indicator
+                DesignSystemComponents.statusDot(
+                  type: _getStatusType(widget.client),
+                  size: 8,
+                ),
+              ],
+            ),
+            SizedBox(height: DesignTokens.space3),
+            
+            // Contact information
+            Row(
+              children: [
+                if (widget.client.email != null) ...[
+                  Expanded(
+                    child: _buildContactInfo(
+                      FluentIcons.mail,
+                      widget.client.email!,
+                    ),
                   ),
                 ],
-              ),
+                if (widget.client.phone != null) ...[
+                  if (widget.client.email != null)
+                    SizedBox(width: DesignTokens.space4),
+                  Expanded(
+                    child: _buildContactInfo(
+                      FluentIcons.phone,
+                      widget.client.phone!,
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ),
+            
+            // Tags
+            clientTagsAsync.when(
+              data: (tags) => tags.isNotEmpty
+                  ? Column(
+                      children: [
+                        SizedBox(height: DesignTokens.space3),
+                        _buildTagsRow(tags),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+            
+            SizedBox(height: DesignTokens.space3),
+            
+            // Footer with last updated and quick actions
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    'Updated ${_formatRelativeDate(widget.client.updatedAt)}',
+                    style: DesignTextStyles.caption.copyWith(
+                      color: DesignTokens.textTertiary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                SizedBox(width: DesignTokens.space2),
+                _buildQuickActions(context),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildContactInfo(IconData icon, String text, FluentThemeData theme) {
+  Widget _buildContactInfo(IconData icon, String text) {
     return Row(
       children: [
-        Icon(
-          icon,
-          size: 14,
-          color: theme.resources.textFillColorSecondary,
+        Container(
+          padding: EdgeInsets.all(DesignTokens.space1),
+          decoration: BoxDecoration(
+            color: DesignTokens.withOpacity(DesignTokens.textSecondary, 0.1),
+            borderRadius: BorderRadius.circular(DesignTokens.radiusSmall),
+          ),
+          child: Icon(
+            icon,
+            size: DesignTokens.iconSizeSmall,
+            color: DesignTokens.textSecondary,
+          ),
         ),
-        const SizedBox(width: 6),
+        SizedBox(width: DesignTokens.space2),
         Expanded(
           child: Text(
             text,
-            style: theme.typography.body?.copyWith(
-              fontSize: 13,
-              color: theme.resources.textFillColorSecondary,
+            style: DesignTextStyles.caption.copyWith(
+              color: DesignTokens.textSecondary,
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -243,32 +230,18 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
     );
   }
 
-  Widget _buildTagsRow(List<TagModel> tags, FluentThemeData theme) {
+  Widget _buildTagsRow(List<TagModel> tags) {
     return Row(
       children: [
         Expanded(
           child: Wrap(
-            spacing: 6,
-            runSpacing: 4,
+            spacing: DesignTokens.space1,
+            runSpacing: DesignTokens.space1,
             children: tags
                 .take(3)
-                .map((tag) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: theme.accentColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: theme.accentColor.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Text(
-                        tag.name,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: theme.accentColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                .map((tag) => DesignSystemComponents.statusBadge(
+                      text: tag.name,
+                      type: SemanticColorType.info,
                     ))
                 .toList(),
           ),
@@ -276,84 +249,75 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
         if (tags.length > 3)
           Text(
             '+${tags.length - 3}',
-            style: theme.typography.caption?.copyWith(
-              color: theme.resources.textFillColorSecondary,
+            style: DesignTextStyles.caption.copyWith(
+              color: DesignTokens.textSecondary,
             ),
           ),
       ],
     );
   }
 
-  Widget _buildQuickActions(FluentThemeData theme, BuildContext context) {
+  Widget _buildQuickActions(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
           width: 24,
           height: 24,
-          child: Button(
-            style: ButtonStyle(
-              padding: WidgetStateProperty.all(const EdgeInsets.all(4)),
-              backgroundColor: WidgetStateProperty.all(Colors.transparent),
-            ),
-            onPressed: () => _showQuickEditDialog(context),
-            child: Icon(
+          child: IconButton(
+            icon: Icon(
               FluentIcons.edit,
               size: 12,
-              color: theme.resources.textFillColorSecondary,
+              color: DesignTokens.textSecondary,
             ),
+            onPressed: () => _showQuickEditDialog(context),
           ),
         ),
-        const SizedBox(width: 2),
+        SizedBox(width: DesignTokens.space1),
         SizedBox(
           width: 24,
           height: 24,
-          child: Button(
-            style: ButtonStyle(
-              padding: WidgetStateProperty.all(const EdgeInsets.all(4)),
-              backgroundColor: WidgetStateProperty.all(Colors.transparent),
-            ),
-            onPressed: () => _launchEmail(context),
-            child: Icon(
+          child: IconButton(
+            icon: Icon(
               FluentIcons.mail,
               size: 12,
-              color: theme.resources.textFillColorSecondary,
+              color: DesignTokens.textSecondary,
             ),
+            onPressed: () => _launchEmail(context),
           ),
         ),
-        const SizedBox(width: 2),
-        // 3. Wrap the button in a FlyoutTarget
+        SizedBox(width: DesignTokens.space1),
         FlyoutTarget(
           controller: _moreActionsFlyoutController,
           child: SizedBox(
             width: 24,
             height: 24,
-            child: Button(
-              style: ButtonStyle(
-                padding: WidgetStateProperty.all(const EdgeInsets.all(4)),
-                backgroundColor: WidgetStateProperty.all(Colors.transparent),
+            child: IconButton(
+              icon: Icon(
+                FluentIcons.more,
+                size: 12,
+                color: DesignTokens.textSecondary,
               ),
               onPressed: () {
-                // 4. Use showFlyout and MenuFlyout
                 _moreActionsFlyoutController.showFlyout(
                   builder: (context) {
                     return MenuFlyout(
                       items: [
                         MenuFlyoutItem(
-                          leading: const Icon(FluentIcons.copy, size: 16),
+                          leading: const Icon(FluentIcons.edit, size: 16),
                           text: const Text('Edit Client'),
                           onPressed: () {
-                            _moreActionsFlyoutController.close(); // Close the flyout
+                            _moreActionsFlyoutController.close();
                             _editClient(context);
                           },
                         ),
                         MenuFlyoutItem(
                           leading: Icon(FluentIcons.delete,
-                              size: 16, color: Colors.red),
+                              size: 16, color: DesignTokens.semanticError),
                           text: Text('Delete Client',
-                              style: TextStyle(color: Colors.red)),
+                              style: TextStyle(color: DesignTokens.semanticError)),
                           onPressed: () {
-                            _moreActionsFlyoutController.close(); // Close the flyout
+                            _moreActionsFlyoutController.close();
                             _confirmDeleteClient(context);
                           },
                         ),
@@ -361,7 +325,7 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
                           leading: const Icon(FluentIcons.download, size: 16),
                           text: const Text('Export Data'),
                           onPressed: () {
-                            _moreActionsFlyoutController.close(); // Close the flyout
+                            _moreActionsFlyoutController.close();
                             _exportClientData(context);
                           },
                         ),
@@ -369,7 +333,7 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
                           leading: const Icon(FluentIcons.bullseye_target, size: 16),
                           text: const Text('View Campaigns'),
                           onPressed: () {
-                            _moreActionsFlyoutController.close(); // Close the flyout
+                            _moreActionsFlyoutController.close();
                             _viewClientCampaigns(context);
                           },
                         ),
@@ -378,11 +342,6 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
                   },
                 );
               },
-              child: Icon(
-                FluentIcons.more,
-                size: 12,
-                color: theme.resources.textFillColorSecondary,
-              ),
             ),
           ),
         ),
@@ -406,7 +365,6 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
   }
 
   void _editClient(BuildContext context) {
-
     context.pushNamed('editClient', pathParameters: {'id': widget.client.id.toString()});
   }
 
@@ -414,17 +372,16 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
     showDialog(
       context: context,
       builder: (context) => ContentDialog(
-        title: const Text('Delete Client'), // 7. Added const
-        // 6. Use widget.client
+        title: const Text('Delete Client'),
         content: Text(
             'Are you sure you want to delete ${widget.client.fullName}? This action cannot be undone.'),
         actions: [
-          Button(
-            child: const Text('Cancel'), // 7. Added const
+          DesignSystemComponents.secondaryButton(
+            text: 'Cancel',
             onPressed: () => Navigator.of(context).pop(),
           ),
-          FilledButton(
-            child: const Text('Delete'), // 7. Added const
+          DesignSystemComponents.dangerButton(
+            text: 'Delete',
             onPressed: () {
               Navigator.of(context).pop();
               _deleteClient(context);
@@ -454,7 +411,6 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
   }
 
   void _viewClientCampaigns(BuildContext context) {
-    // 6. Use widget.client
     context.go('/campaigns', extra: {'clientId': widget.client.id});
   }
 
@@ -462,11 +418,11 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
     displayInfoBar(
       context,
       builder: (context, close) => InfoBar(
-        title: const Text('Error'), // 7. Added const
+        title: const Text('Error'),
         content: Text(message),
         severity: InfoBarSeverity.error,
         action: IconButton(
-          icon: const Icon(FluentIcons.clear), // 7. Added const
+          icon: const Icon(FluentIcons.clear),
           onPressed: close,
         ),
       ),
@@ -477,11 +433,11 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
     displayInfoBar(
       context,
       builder: (context, close) => InfoBar(
-        title: const Text('Success'), // 7. Added const
+        title: const Text('Success'),
         content: Text(message),
         severity: InfoBarSeverity.success,
         action: IconButton(
-          icon: const Icon(FluentIcons.clear), // 7. Added const
+          icon: const Icon(FluentIcons.clear),
           onPressed: close,
         ),
       ),
@@ -492,11 +448,11 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
     displayInfoBar(
       context,
       builder: (context, close) => InfoBar(
-        title: const Text('Info'), // 7. Added const
+        title: const Text('Info'),
         content: Text(message),
         severity: InfoBarSeverity.info,
         action: IconButton(
-          icon: const Icon(FluentIcons.clear), // 7. Added const
+          icon: const Icon(FluentIcons.clear),
           onPressed: close,
         ),
       ),
@@ -513,16 +469,15 @@ class _EnhancedClientCardState extends ConsumerState<EnhancedClientCard> {
     return '?';
   }
 
-  Color _getStatusColor(ClientModel client) {
-    // Simple status logic - can be enhanced based on business rules
+  SemanticColorType _getStatusType(ClientModel client) {
     final daysSinceUpdate = DateTime.now().difference(client.updatedAt).inDays;
 
     if (daysSinceUpdate <= 7) {
-      return Colors.green; // Recently active
+      return SemanticColorType.success; // Recently active
     } else if (daysSinceUpdate <= 30) {
-      return Colors.orange; // Moderately active
+      return SemanticColorType.warning; // Moderately active
     } else {
-      return Colors.grey; // Inactive
+      return SemanticColorType.info; // Inactive
     }
   }
 

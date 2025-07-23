@@ -1,160 +1,179 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../core/design_system/design_tokens.dart';
+import '../../../../core/design_system/component_library.dart';
 
 class QuickActionsWidget extends StatelessWidget {
   const QuickActionsWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Quick Actions',
-          style: theme.typography.bodyStrong?.copyWith(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
+    return DesignSystemComponents.glassmorphismCard(
+      padding: EdgeInsets.all(DesignTokens.space4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with design system styling
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(DesignTokens.space2),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      DesignTokens.accentPrimary,
+                      DesignTokens.accentSecondary,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                  boxShadow: [
+                    BoxShadow(
+                      color: DesignTokens.accentPrimary.withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  FluentIcons.lightning_bolt,
+                  size: DesignTokens.iconSizeMedium,
+                  color: DesignTokens.textInverse,
+                ),
+              ),
+              SizedBox(width: DesignTokens.space3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Quick Actions',
+                      style: DesignTextStyles.subtitle.copyWith(
+                        fontWeight: DesignTokens.fontWeightSemiBold,
+                      ),
+                    ),
+                    SizedBox(height: DesignTokens.space1),
+                    Text(
+                      'Common tasks and shortcuts',
+                      style: DesignTextStyles.caption.copyWith(
+                        color: DesignTokens.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ),
-        
-        const SizedBox(height: 16),
-        
-        Expanded(
-          child: SingleChildScrollView(
+          SizedBox(height: DesignTokens.space4),
+          
+          // Quick Action Items
+          Expanded(
             child: Column(
               children: [
-                _QuickActionButton(
-                  icon: FluentIcons.add_friend,
-                  label: 'Add Client',
-                  description: 'Create a new client profile',
-                  color: theme.accentColor,
-                  onPressed: () {},
+                _buildQuickActionItem(
+                  context,
+                  'Add New Client',
+                  'Create a new client profile',
+                  FluentIcons.reminder_person,
+                  DesignTokens.accentPrimary,
+                  () => context.go('/clients/add'),
                 ),
-                
-                const SizedBox(height: 12),
-                
-                _QuickActionButton(
-                  icon: FluentIcons.send,
-                  label: 'New Campaign',
-                  description: 'Start a messaging campaign',
-                  color: Colors.blue,
-                  onPressed: () {},
+                SizedBox(height: DesignTokens.space3),
+                _buildQuickActionItem(
+                  context,
+                  'Create Campaign',
+                  'Start a new marketing campaign',
+                  FluentIcons.send,
+                  DesignTokens.semanticInfo,
+                  () => context.go('/campaigns/create'),
                 ),
-                
-                const SizedBox(height: 12),
-                
-                _QuickActionButton(
-                  icon: FluentIcons.page_add,
-                  label: 'Create Template',
-                  description: 'Design a new message template',
-                  color: Colors.purple,
-                  onPressed: () {},
+                SizedBox(height: DesignTokens.space3),
+                _buildQuickActionItem(
+                  context,
+                  'New Template',
+                  'Design a message template',
+                  FluentIcons.page,
+                  DesignTokens.semanticWarning,
+                  () => context.go('/templates/editor'),
                 ),
-                
-                const SizedBox(height: 12),
-                
-                _QuickActionButton(
-                  icon: FluentIcons.import,
-                  label: 'Import Data',
-                  description: 'Import clients from file',
-                  color: Colors.orange,
-                  onPressed: () {},
+                SizedBox(height: DesignTokens.space3),
+                _buildQuickActionItem(
+                  context,
+                  'View Analytics',
+                  'Check performance metrics',
+                  FluentIcons.analytics_report,
+                  DesignTokens.semanticSuccess,
+                  () => context.go('/analytics'),
                 ),
               ],
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
-}
 
-class _QuickActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String description;
-  final Color color;
-  final VoidCallback onPressed;
-
-  const _QuickActionButton({
-    required this.icon,
-    required this.label,
-    required this.description,
-    required this.color,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-    
-    return SizedBox(
-      width: double.infinity,
-      child: Button(
-        style: ButtonStyle(
-          backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.isHovered) {
-              return color.withValues(alpha: 0.1);
-            }
-            return theme.resources.cardBackgroundFillColorSecondary;
-          }),
-          padding: WidgetStateProperty.all(const EdgeInsets.all(16)),
-          shape: WidgetStateProperty.all(
-            RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(
-                color: theme.resources.dividerStrokeColorDefault.withValues(alpha: 0.3),
-              ),
-            ),
-          ),
-        ),
-        onPressed: onPressed,
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                size: 16,
-                color: color,
-              ),
-            ),
-            
-            const SizedBox(width: 12),
-            
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: theme.typography.body?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    description,
-                    style: theme.typography.caption?.copyWith(
-                      color: theme.resources.textFillColorSecondary,
-                    ),
-                  ),
+  Widget _buildQuickActionItem(
+    BuildContext context,
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return DesignSystemComponents.standardCard(
+      onTap: onTap,
+      isHoverable: true,
+      padding: EdgeInsets.all(DesignTokens.space4),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  color.withValues(alpha: 0.15),
+                  color.withValues(alpha: 0.08),
                 ],
               ),
+              borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+              border: Border.all(
+                color: color.withValues(alpha: 0.3),
+              ),
             ),
-            
-            Icon(
-              FluentIcons.chevron_right,
-              size: 12,
-              color: theme.resources.textFillColorTertiary,
+            child: Icon(
+              icon,
+              size: DesignTokens.iconSizeMedium,
+              color: color,
             ),
-          ],
-        ),
+          ),
+          SizedBox(width: DesignTokens.space3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: DesignTextStyles.body.copyWith(
+                    fontWeight: DesignTokens.fontWeightSemiBold,
+                  ),
+                ),
+                SizedBox(height: DesignTokens.space1),
+                Text(
+                  subtitle,
+                  style: DesignTextStyles.caption.copyWith(
+                    color: DesignTokens.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            FluentIcons.chevron_right,
+            size: DesignTokens.iconSizeSmall,
+            color: DesignTokens.textTertiary,
+          ),
+        ],
       ),
     );
   }

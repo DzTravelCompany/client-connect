@@ -1,16 +1,16 @@
 import 'package:client_connect/src/core/services/sending_engine.dart';
 import 'package:client_connect/src/features/campaigns/data/campaigns_model.dart';
 import 'package:client_connect/src/features/campaigns/logic/campaign_providers.dart';
-import 'package:client_connect/src/features/campaigns/presentation/campaign_logs_dialog.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
 import '../../../core/presentation/layouts/three_column_layout.dart';
+import '../../../core/design_system/design_tokens.dart';
+import '../../../core/design_system/component_library.dart';
 import 'widgets/campaign_filter_panel.dart';
 import 'widgets/enhanced_campaign_card.dart';
 import 'widgets/campaign_details_panel.dart';
-
+import 'widgets/bulk_campaign_actions_panel.dart';
 
 class CampaignDashboardScreen extends ConsumerStatefulWidget {
   const CampaignDashboardScreen({super.key});
@@ -20,50 +20,147 @@ class CampaignDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScreen> {
-  String _selectedFilter = 'all';
+  bool _showBulkActions = false;
+  Key _campaignListKey = UniqueKey();
 
   @override
   Widget build(BuildContext context) {
-
     return Consumer(
-      builder: (context, ref, child){
+      builder: (context, ref, child) {
         final campaignsAsync = ref.watch(allCampaignsProvider);
         final progressAsync = ref.watch(campaignProgressProvider);
         final filterState = ref.watch(campaignFilterStateProvider);
         final detailPanelState = ref.watch(campaignDetailPanelProvider);
-        return ScaffoldPage(
-          header: PageHeader(
-            title: const Text('Campaign Dashboard'),
-            commandBar: CommandBar(
-              primaryItems: [
-                CommandBarButton(
-                  icon: const Icon(FluentIcons.add),
-                  label: const Text('New Campaign'),
-                  onPressed: () => context.pushNamed('createCampaigns'),
+        
+        // Listen to campaign creation state to refresh list
+        ref.listen<CampaignCreationState>(campaignCreationProvider, (previous, next) {
+          if (previous?.isCreated != next.isCreated && next.isCreated) {
+            setState(() {
+              _campaignListKey = UniqueKey(); // Force rebuild when campaign is created
+            });
+          }
+        });
+
+        // Listen to campaign actions to refresh list
+        ref.listen<CampaignActionsState>(campaignActionsProvider, (previous, next) {
+          if (previous?.successMessage != next.successMessage && next.successMessage != null) {
+            setState(() {
+              _campaignListKey = UniqueKey(); // Force rebuild after actions
+            });
+          }
+        });
+        
+        return Container(
+          color: DesignTokens.surfacePrimary,
+          child: Column(
+            children: [
+              _buildHeader(context, ref),
+              Expanded(
+                child: ThreeColumnLayout(
+                  sidebar: const CampaignFilterPanel(),
+                  mainContent: _buildMainContent(context, ref, campaignsAsync, progressAsync, filterState),
+                  detailPanel: detailPanelState.isVisible 
+                      ? _buildDetailPanel(context, ref, detailPanelState)
+                      : _showBulkActions
+                          ? campaignsAsync.when(
+                              data: (campaigns) => BulkCampaignActionsPanel(
+                                campaigns: _filterCampaigns(campaigns, filterState),
+                                onClose: () => setState(() => _showBulkActions = false),
+                              ),
+                              loading: () => const SizedBox.shrink(),
+                              error: (_, __) => const SizedBox.shrink(),
+                            )
+                          : null,
+                  showDetailPanel: detailPanelState.isVisible || _showBulkActions,
                 ),
-                CommandBarButton(
-                  icon: const Icon(FluentIcons.analytics_report),
-                  label: const Text('Analytics'),
-                  onPressed: () => context.pushNamed('seeAnalyticsCampaigns'),
+              ),
+            ],
+          ),
+        );
+      }
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, WidgetRef ref) {
+    return Container(
+      padding: const EdgeInsets.all(DesignTokens.space6),
+      decoration: BoxDecoration(
+        color: DesignTokens.surfaceSecondary,
+        border: Border(
+          bottom: BorderSide(
+            color: DesignTokens.borderPrimary,
+            width: 1,
+          ),
+        ),
+        boxShadow: DesignTokens.shadowLow,
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(DesignTokens.space2),
+            decoration: BoxDecoration(
+              color: DesignTokens.withOpacity(DesignTokens.semanticInfo, 0.1),
+              borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+              border: Border.all(
+                color: DesignTokens.withOpacity(DesignTokens.semanticInfo, 0.2),
+              ),
+            ),
+            child: Icon(
+              FluentIcons.send,
+              size: DesignTokens.iconSizeLarge,
+              color: DesignTokens.semanticInfo,
+            ),
+          ),
+          SizedBox(width: DesignTokens.space3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Campaign Dashboard',
+                  style: DesignTextStyles.titleLarge.copyWith(
+                    fontWeight: DesignTokens.fontWeightSemiBold,
+                  ),
                 ),
-                CommandBarButton(
-                  icon: const Icon(FluentIcons.refresh),
-                  label: const Text('Refresh'),
-                  onPressed: () => ref.invalidate(allCampaignsProvider),
+                SizedBox(height: DesignTokens.space1),
+                Text(
+                  'Manage and monitor your marketing campaigns',
+                  style: DesignTextStyles.body.copyWith(
+                    color: DesignTokens.textSecondary,
+                  ),
                 ),
               ],
             ),
           ),
-          content: ThreeColumnLayout(
-            sidebar: const CampaignFilterPanel(),
-            mainContent: _buildMainContent(context, ref, campaignsAsync, progressAsync, filterState),
-            detailPanel: detailPanelState.isVisible 
-                ? _buildDetailPanel(context, ref, detailPanelState)
-                : null,
-            showDetailPanel: detailPanelState.isVisible,
+          Row(
+            children: [
+              DesignSystemComponents.secondaryButton(
+                text: _showBulkActions ? 'Hide Bulk Actions' : 'Bulk Actions',
+                icon: FluentIcons.multi_select,
+                onPressed: () => setState(() => _showBulkActions = !_showBulkActions),
+              ),
+              SizedBox(width: DesignTokens.space3),
+              DesignSystemComponents.secondaryButton(
+                text: 'Analytics',
+                icon: FluentIcons.analytics_report,
+                onPressed: () => context.pushNamed('seeAnalyticsCampaigns'),
+              ),
+              SizedBox(width: DesignTokens.space3),
+              DesignSystemComponents.secondaryButton(
+                text: 'Refresh',
+                icon: FluentIcons.refresh,
+                onPressed: () => ref.invalidate(allCampaignsProvider),
+              ),
+              SizedBox(width: DesignTokens.space3),
+              DesignSystemComponents.primaryButton(
+                text: 'New Campaign',
+                icon: FluentIcons.add,
+                onPressed: () => context.pushNamed('createCampaigns'),
+              ),
+            ],
           ),
-        );
-      }
+        ],
+      ),
     );
   }
 
@@ -74,8 +171,8 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
     AsyncValue<CampaignProgress> progressAsync,
     CampaignFilterState filterState,
   ) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
+    return Container(
+      padding: const EdgeInsets.all(DesignTokens.space4),
       child: Column(
         children: [
           // Campaign health indicators
@@ -99,11 +196,12 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
                 }
 
                 return GridView.builder(
+                  key: _campaignListKey, // Use key to force rebuilds
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     childAspectRatio: 1.5,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
+                    crossAxisSpacing: DesignTokens.space4,
+                    mainAxisSpacing: DesignTokens.space4,
                   ),
                   itemCount: filteredCampaigns.length,
                   itemBuilder: (context, index) {
@@ -112,21 +210,16 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
                   },
                 );
               },
-              loading: () => const Center(child: ProgressRing()),
-              error: (error, stack) => Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(FluentIcons.error, size: 48, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text('Error loading campaigns: $error'),
-                    const SizedBox(height: 16),
-                    Button(
-                      onPressed: () => ref.invalidate(allCampaignsProvider),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
+              loading: () => DesignSystemComponents.loadingIndicator(
+                message: 'Loading campaigns...',
+              ),
+              error: (error, stack) => DesignSystemComponents.emptyState(
+                title: 'Error loading campaigns',
+                message: error.toString(),
+                icon: FluentIcons.error,
+                iconColor: DesignTokens.semanticError,
+                actionText: 'Retry',
+                onAction: () => ref.invalidate(allCampaignsProvider),
               ),
             ),
           ),
@@ -148,80 +241,59 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
         
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                criticalCampaigns > 0 
-                    ? Colors.red.withValues(alpha: 0.1)
-                    : warningCampaigns > 0
-                        ? Colors.orange.withValues(alpha: 0.1)
-                        : Colors.green.withValues(alpha: 0.1),
-                Colors.transparent,
+          margin: EdgeInsets.only(bottom: DesignTokens.space4),
+          child: DesignSystemComponents.standardCard(
+            padding: const EdgeInsets.all(DesignTokens.space4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      FluentIcons.health,
+                      size: DesignTokens.iconSizeMedium,
+                      color: criticalCampaigns > 0 
+                          ? DesignTokens.semanticError
+                          : warningCampaigns > 0
+                              ? DesignTokens.semanticWarning
+                              : DesignTokens.semanticSuccess,
+                    ),
+                    SizedBox(width: DesignTokens.space2),
+                    Text(
+                      'Campaign Health Overview',
+                      style: DesignTextStyles.subtitle.copyWith(
+                        fontWeight: DesignTokens.fontWeightSemiBold,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${healthIndicators.length} active campaigns',
+                      style: DesignTextStyles.caption.copyWith(
+                        color: DesignTokens.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                SizedBox(height: DesignTokens.space3),
+                
+                Row(
+                  children: [
+                    _buildHealthStat('Healthy', healthyCampaigns, DesignTokens.semanticSuccess),
+                    SizedBox(width: DesignTokens.space4),
+                    _buildHealthStat('Warning', warningCampaigns, DesignTokens.semanticWarning),
+                    SizedBox(width: DesignTokens.space4),
+                    _buildHealthStat('Critical', criticalCampaigns, DesignTokens.semanticError),
+                    const Spacer(),
+                    if (criticalCampaigns > 0 || warningCampaigns > 0)
+                      DesignSystemComponents.secondaryButton(
+                        text: 'View Details',
+                        onPressed: () => _showHealthDetails(healthIndicators),
+                      ),
+                  ],
+                ),
               ],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
             ),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: criticalCampaigns > 0 
-                  ? Colors.red.withValues(alpha: 0.3)
-                  : warningCampaigns > 0
-                      ? Colors.orange.withValues(alpha: 0.3)
-                      : Colors.green.withValues(alpha: 0.3),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    FluentIcons.health,
-                    size: 20,
-                    color: criticalCampaigns > 0 
-                        ? Colors.red
-                        : warningCampaigns > 0
-                            ? Colors.orange
-                            : Colors.green,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Campaign Health Overview',
-                    style: FluentTheme.of(context).typography.subtitle?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${healthIndicators.length} active campaigns',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 12),
-              
-              Row(
-                children: [
-                  _buildHealthStat('Healthy', healthyCampaigns, Colors.green),
-                  const SizedBox(width: 16),
-                  _buildHealthStat('Warning', warningCampaigns, Colors.orange),
-                  const SizedBox(width: 16),
-                  _buildHealthStat('Critical', criticalCampaigns, Colors.red),
-                  const Spacer(),
-                  if (criticalCampaigns > 0 || warningCampaigns > 0)
-                    Button(
-                      onPressed: () => _showHealthDetails(healthIndicators),
-                      child: const Text('View Details'),
-                    ),
-                ],
-              ),
-            ],
           ),
         );
       },
@@ -233,21 +305,24 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
   Widget _buildHealthStat(String label, int count, Color color) {
     return Row(
       children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+        DesignSystemComponents.statusDot(
+          type: _getSemanticTypeFromColor(color),
+          size: 8.0,
         ),
-        const SizedBox(width: 4),
+        SizedBox(width: DesignTokens.space1),
         Text(
           '$label: $count',
-          style: const TextStyle(fontSize: 12),
+          style: DesignTextStyles.caption,
         ),
       ],
     );
+  }
+
+  SemanticColorType _getSemanticTypeFromColor(Color color) {
+    if (color == DesignTokens.semanticSuccess) return SemanticColorType.success;
+    if (color == DesignTokens.semanticWarning) return SemanticColorType.warning;
+    if (color == DesignTokens.semanticError) return SemanticColorType.error;
+    return SemanticColorType.info;
   }
 
   void _showHealthDetails(List<CampaignHealthIndicator> healthIndicators) {
@@ -261,75 +336,74 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
             itemCount: healthIndicators.length,
             itemBuilder: (context, index) {
               final indicator = healthIndicators[index];
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: indicator.isCritical 
-                                  ? Colors.red
-                                  : indicator.hasWarnings
-                                      ? Colors.orange
-                                      : Colors.green,
-                              shape: BoxShape.circle,
+              return DesignSystemComponents.standardCard(
+                padding: const EdgeInsets.all(DesignTokens.space3),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        DesignSystemComponents.statusDot(
+                          type: indicator.isCritical 
+                              ? SemanticColorType.error
+                              : indicator.hasWarnings
+                                  ? SemanticColorType.warning
+                                  : SemanticColorType.success,
+                          size: 12.0,
+                        ),
+                        SizedBox(width: DesignTokens.space2),
+                        Expanded(
+                          child: Text(
+                            indicator.campaignName,
+                            style: DesignTextStyles.body.copyWith(
+                              fontWeight: DesignTokens.fontWeightSemiBold,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              indicator.campaignName,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
+                        ),
+                        Text(
+                          '${(indicator.healthScore * 100).toStringAsFixed(0)}%',
+                          style: DesignTextStyles.body.copyWith(
+                            fontWeight: DesignTokens.fontWeightBold,
+                            color: indicator.isCritical 
+                                ? DesignTokens.semanticError
+                                : indicator.hasWarnings
+                                    ? DesignTokens.semanticWarning
+                                    : DesignTokens.semanticSuccess,
                           ),
-                          Text(
-                            '${(indicator.healthScore * 100).toStringAsFixed(0)}%',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: indicator.isCritical 
-                                  ? Colors.red
-                                  : indicator.hasWarnings
-                                      ? Colors.orange
-                                      : Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (indicator.issues.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        ...indicator.issues.map((issue) => Padding(
-                          padding: const EdgeInsets.only(left: 20, bottom: 2),
-                          child: Row(
-                            children: [
-                              Icon(FluentIcons.warning, size: 12, color: Colors.red),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  issue,
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )),
+                        ),
                       ],
+                    ),
+                    if (indicator.issues.isNotEmpty) ...[
+                      SizedBox(height: DesignTokens.space2),
+                      ...indicator.issues.map((issue) => Padding(
+                        padding: EdgeInsets.only(left: DesignTokens.space5, bottom: DesignTokens.space1),
+                        child: Row(
+                          children: [
+                            Icon(
+                              FluentIcons.warning,
+                              size: DesignTokens.iconSizeSmall,
+                              color: DesignTokens.semanticError,
+                            ),
+                            SizedBox(width: DesignTokens.space1),
+                            Expanded(
+                              child: Text(
+                                issue,
+                                style: DesignTextStyles.caption,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
                     ],
-                  ),
+                  ],
                 ),
               );
             },
           ),
         ),
         actions: [
-          Button(
-            child: const Text('Close'),
+          DesignSystemComponents.secondaryButton(
+            text: 'Close',
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -420,87 +494,75 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
   }
 
   Widget _buildEmptyState(bool hasFilters) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(FluentIcons.send, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          Text(
-            hasFilters ? 'No campaigns match your filters' : 'No campaigns yet',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            hasFilters 
-                ? 'Try adjusting your search criteria'
-                : 'Create your first campaign to get started',
-          ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: () => context.go('/campaigns/create'),
-            child: const Text('Create Campaign'),
-          ),
-        ],
-      ),
+    return DesignSystemComponents.emptyState(
+      title: hasFilters ? 'No campaigns match your filters' : 'No campaigns yet',
+      message: hasFilters 
+          ? 'Try adjusting your search criteria'
+          : 'Create your first campaign to get started',
+      icon: FluentIcons.send,
+      iconColor: DesignTokens.textTertiary,
+      actionText: 'Create Campaign',
+      onAction: () => context.go('/campaigns/create'),
     );
   }
 
   Widget _buildProgressIndicator(CampaignProgress progress) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.blue.withValues(alpha: (0.1)),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue.withValues(alpha: (0.3))),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(FluentIcons.send, size: 20, color: Colors.blue),
-              const SizedBox(width: 8),
-              Text(
-                'Campaign in Progress',
-                style: FluentTheme.of(context).typography.subtitle,
-              ),
-              const Spacer(),
-              Text(
-                '${progress.processed}/${progress.total}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          
-          // Progress bar
-          ProgressBar(
-            value: progress.progressPercentage * 100,
-          ),
-          
-          const SizedBox(height: 8),
-          
-          Row(
-            children: [
-              _buildProgressStat('Successful', progress.successful, Colors.green),
-              const SizedBox(width: 16),
-              _buildProgressStat('Failed', progress.failed, Colors.red),
-              const Spacer(),
-              if (progress.currentStatus != null)
+      margin: EdgeInsets.only(bottom: DesignTokens.space4),
+      child: DesignSystemComponents.standardCard(
+        padding: const EdgeInsets.all(DesignTokens.space4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  FluentIcons.send,
+                  size: DesignTokens.iconSizeMedium,
+                  color: DesignTokens.semanticInfo,
+                ),
+                SizedBox(width: DesignTokens.space2),
                 Text(
-                  progress.currentStatus!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[100],
-                    fontStyle: FontStyle.italic,
+                  'Campaign in Progress',
+                  style: DesignTextStyles.subtitle,
+                ),
+                const Spacer(),
+                Text(
+                  '${progress.processed}/${progress.total}',
+                  style: DesignTextStyles.body.copyWith(
+                    fontWeight: DesignTokens.fontWeightBold,
                   ),
                 ),
-            ],
-          ),
-        ],
+              ],
+            ),
+            SizedBox(height: DesignTokens.space3),
+            
+            // Progress bar
+            ProgressBar(
+              value: progress.progressPercentage * 100,
+            ),
+            
+            SizedBox(height: DesignTokens.space2),
+            
+            Row(
+              children: [
+                _buildProgressStat('Successful', progress.successful, DesignTokens.semanticSuccess),
+                SizedBox(width: DesignTokens.space4),
+                _buildProgressStat('Failed', progress.failed, DesignTokens.semanticError),
+                const Spacer(),
+                if (progress.currentStatus != null)
+                  Text(
+                    progress.currentStatus!,
+                    style: DesignTextStyles.caption.copyWith(
+                      color: DesignTokens.textSecondary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -508,331 +570,14 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
   Widget _buildProgressStat(String label, int value, Color color) {
     return Row(
       children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+        DesignSystemComponents.statusDot(
+          type: _getSemanticTypeFromColor(color),
+          size: 8.0,
         ),
-        const SizedBox(width: 4),
+        SizedBox(width: DesignTokens.space1),
         Text(
           '$label: $value',
-          style: const TextStyle(fontSize: 12),
-        ),
-      ],
-    );
-  }
-
-  // TODO see this function later
-  // ignore: unused_element
-  Widget _buildFilterTab(String value, String label) {
-    final isSelected = _selectedFilter == value;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedFilter = value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? FluentTheme.of(context).accentColor : Colors.transparent,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: isSelected ? FluentTheme.of(context).accentColor : Colors.grey[60],
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : null,
-            fontWeight: isSelected ? FontWeight.bold : null,
-          ),
-        ),
-      ),
-    );
-  }
-
-  // TODO see this function later
-  // ignore: unused_element
-  Widget _buildCampaignCard(CampaignModel campaign) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header row
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        campaign.name,
-                        style: FluentTheme.of(context).typography.subtitle,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Created ${_formatDate(campaign.createdAt)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[100],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                _buildStatusBadge(campaign.status),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(FluentIcons.more),
-                  onPressed: () => _showCampaignMenu(campaign),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 12),
-            
-            // Campaign details
-            Row(
-              children: [
-                Expanded(
-                  child: _buildDetailItem(
-                    FluentIcons.people,
-                    'Recipients',
-                    '${campaign.clientIds.length}',
-                  ),
-                ),
-                Expanded(
-                  child: _buildDetailItem(
-                    FluentIcons.calendar,
-                    'Scheduled',
-                    campaign.scheduledAt != null 
-                        ? _formatDate(campaign.scheduledAt!)
-                        : 'Immediate',
-                  ),
-                ),
-                if (campaign.completedAt != null)
-                  Expanded(
-                    child: _buildDetailItem(
-                      FluentIcons.completed,
-                      'Completed',
-                      _formatDate(campaign.completedAt!),
-                    ),
-                  ),
-              ],
-            ),
-            
-            // Message logs summary for completed campaigns
-            if (campaign.isCompleted || campaign.isInProgress)
-              _buildMessageLogsSummary(campaign.id),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusBadge(String status) {
-    Color color;
-    IconData icon;
-    
-    switch (status) {
-      case 'pending':
-        color = Colors.orange;
-        icon = FluentIcons.clock;
-        break;
-      case 'scheduled':
-        color = Colors.purple;
-        icon = FluentIcons.calendar;
-        break;
-      case 'in_progress':
-        color = Colors.blue;
-        icon = FluentIcons.send;
-        break;
-      case 'completed':
-        color = Colors.green;
-        icon = FluentIcons.completed;
-        break;
-      case 'failed':
-        color = Colors.red;
-        icon = FluentIcons.error;
-        break;
-      default:
-        color = Colors.grey;
-        icon = FluentIcons.help;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: (0.1)),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: (0.3))),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(
-            status.toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailItem(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.grey[100]),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey[100],
-              ),
-            ),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMessageLogsSummary(int campaignId) {
-    final messageLogsAsync = ref.watch(campaignMessageLogsProvider(campaignId));
-    
-    return messageLogsAsync.when(
-      data: (logs) {
-        final sent = logs.where((log) => log.isSent).length;
-        final failed = logs.where((log) => log.isFailed).length;
-        final pending = logs.where((log) => log.isPending).length;
-        
-        return Container(
-          margin: const EdgeInsets.only(top: 12),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.grey,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(
-            children: [
-              _buildMessageStat('Sent', sent, Colors.green),
-              const SizedBox(width: 16),
-              _buildMessageStat('Failed', failed, Colors.red),
-              const SizedBox(width: 16),
-              _buildMessageStat('Pending', pending, Colors.orange),
-              const Spacer(),
-              Button(
-                onPressed: () => _showMessageLogs(campaignId),
-                child: const Text('View Details'),
-              ),
-            ],
-          ),
-        );
-      },
-      loading: () => const SizedBox(height: 20, child: ProgressRing()),
-      error: (_, __) => const SizedBox.shrink(),
-    );
-  }
-
-  
-
-  void _showCampaignMenu(CampaignModel campaign) {
-    showDialog(
-      context: context,
-      builder: (context) => ContentDialog(
-        title: Text(campaign.name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (campaign.isPending)
-              ListTile(
-                leading: const Icon(FluentIcons.play),
-                title: const Text('Start Campaign'),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _startCampaign(ref, campaign.id);
-                },
-              ),
-            if (campaign.isInProgress)
-              ListTile(
-                leading: const Icon(FluentIcons.pause),
-                title: const Text('Stop Campaign'),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _pauseCampaign(ref, campaign.id);
-                },
-              ),
-            ListTile(
-              leading: const Icon(FluentIcons.view),
-              title: const Text('View Details'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                context.go('/campaigns/${campaign.id}');
-              },
-            ),
-            ListTile(
-              leading: const Icon(FluentIcons.mail),
-              title: const Text('Message Logs'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                _showMessageLogs(campaign.id);
-              },
-            ),
-            if (campaign.isCompleted || campaign.isFailed)
-              ListTile(
-                leading: const Icon(FluentIcons.delete),
-                title: const Text('Delete Campaign'),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _showDeleteDialog(campaign.id);
-                },
-              ),
-          ],
-        ),
-        actions: [
-          Button(
-            child: const Text('Close'),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessageStat(String label, int count, Color color) {
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          '$label: $count',
-          style: const TextStyle(fontSize: 12),
+          style: DesignTextStyles.caption,
         ),
       ],
     );
@@ -842,6 +587,12 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
     try {
       final controller = ref.read(campaignControlProvider);
       await controller.startCampaign(campaignId);
+      
+      // Force refresh of campaign list
+      ref.invalidate(allCampaignsProvider);
+      setState(() {
+        _campaignListKey = UniqueKey();
+      });
       
       if (mounted) {
         displayInfoBar(
@@ -874,6 +625,12 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
       final controller = ref.read(campaignControlProvider);
       await controller.stopCampaign(campaignId);
       
+      // Force refresh of campaign list
+      ref.invalidate(allCampaignsProvider);
+      setState(() {
+        _campaignListKey = UniqueKey();
+      });
+      
       if (mounted) {
         displayInfoBar(
           context,
@@ -897,60 +654,6 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
           ),
         );
       }
-    }
-  }
-
-  void _showMessageLogs(int campaignId) {
-    showDialog(
-      context: context,
-      builder: (context) => MessageLogsDialog(campaignId: campaignId),
-    );
-  }
-
-  void _showDeleteDialog(int campaignId) {
-    showDialog(
-      context: context,
-      builder: (context) => ContentDialog(
-        title: const Text('Delete Campaign'),
-        content: const Text('Are you sure you want to delete this campaign? This action cannot be undone.'),
-        actions: [
-          Button(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          FilledButton(
-            child: const Text('Delete'),
-            onPressed: () {
-              Navigator.of(context).pop();
-              // TODO: Implement delete functionality
-              displayInfoBar(
-                context,
-                builder: (context, close) => InfoBar(
-                  title: const Text('Campaign Deleted'),
-                  content: const Text('The campaign has been deleted.'),
-                  severity: InfoBarSeverity.success,
-                  onClose: close,
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-    
-    if (difference.inDays > 0) {
-      return '${difference.inDays} days ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} hours ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minutes ago';
-    } else {
-      return 'Just now';
     }
   }
 }

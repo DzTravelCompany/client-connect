@@ -1,3 +1,5 @@
+import 'package:client_connect/src/core/design_system/component_library.dart';
+import 'package:client_connect/src/core/design_system/design_tokens.dart';
 import 'package:client_connect/src/features/clients/data/client_activity_model.dart';
 import 'package:client_connect/src/features/clients/logic/client_activity_providers.dart';
 import 'package:client_connect/src/features/tags/data/tag_model.dart';
@@ -7,6 +9,7 @@ import '../../logic/client_providers.dart';
 import '../../data/client_model.dart';
 import '../../../tags/logic/tag_providers.dart';
 import 'client_activity_timeline.dart';
+
 
 class ClientDetailsPanel extends ConsumerStatefulWidget {
   final int clientId;
@@ -76,58 +79,126 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
     final clientAsync = ref.watch(clientByIdProvider(widget.clientId));
     final clientTagsAsync = ref.watch(clientTagsProvider(widget.clientId));
     final clientCampaignsAsync = ref.watch(clientCampaignsProvider(widget.clientId));
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            DesignTokens.surfacePrimary.withValues(alpha: 0.95),
+            DesignTokens.surfacePrimary.withValues(alpha: 0.85),
+          ],
+        ),
+        border: Border(
+          left: BorderSide(
+            color: DesignTokens.accentPrimary.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(-2, 0),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Client Details',
-                  style: theme.typography.subtitle?.copyWith(
-                    fontWeight: FontWeight.w600,
+          // Enhanced Header
+          Container(
+            padding: EdgeInsets.all(DesignTokens.space6),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: DesignTokens.accentPrimary.withValues(alpha: 0.15),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(DesignTokens.space2),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        DesignTokens.accentPrimary.withValues(alpha: 0.15),
+                        DesignTokens.accentPrimary.withValues(alpha: 0.08),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                    border: Border.all(
+                      color: DesignTokens.accentPrimary.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Icon(
+                    FluentIcons.contact,
+                    size: DesignTokens.iconSizeMedium,
+                    color: DesignTokens.accentPrimary,
                   ),
                 ),
-              ),
-              if (_isEditing) ...[
-                Button(
-                  onPressed: () => _cancelEdit(),
-                  child: const Text('Cancel'),
+                SizedBox(width: DesignTokens.space3),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Client Details',
+                        style: DesignTextStyles.subtitle.copyWith(
+                          fontWeight: DesignTokens.fontWeightBold,
+                        ),
+                      ),
+                      Text(
+                        'View and edit client information',
+                        style: DesignTextStyles.caption.copyWith(
+                          color: DesignTokens.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: () => _saveChanges(),
-                  child: const Text('Save'),
-                ),
-              ] else ...[
+                if (_isEditing) ...[
+                  DesignSystemComponents.secondaryButton(
+                    text: 'Cancel',
+                    onPressed: () => _cancelEdit(),
+                  ),
+                  SizedBox(width: DesignTokens.space2),
+                  DesignSystemComponents.primaryButton(
+                    text: 'Save',
+                    onPressed: () => _saveChanges(),
+                  ),
+                ] else ...[
+                  DesignSystemComponents.secondaryButton(
+                    text: 'Edit',
+                    icon: FluentIcons.edit,
+                    onPressed: () => _startEdit(),
+                  ),
+                ],
+                SizedBox(width: DesignTokens.space2),
                 IconButton(
-                  icon: const Icon(FluentIcons.edit),
-                  onPressed: () => _startEdit(),
+                  icon: Icon(FluentIcons.chrome_close, size: DesignTokens.iconSizeSmall),
+                  onPressed: widget.onClose,
                 ),
               ],
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(FluentIcons.chrome_close),
-                onPressed: widget.onClose,
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 24),
 
           // Content
           Expanded(
             child: clientAsync.when(
               data: (client) {
                 if (client == null) {
-                  return const Center(child: Text('Client not found'));
+                  return DesignSystemComponents.emptyState(
+                    title: 'Client not found',
+                    message: 'The requested client could not be found',
+                    icon: FluentIcons.search,
+                  );
                 }
 
                 // Populate controllers when data loads
@@ -138,73 +209,80 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
                 }
 
                 return SingleChildScrollView(
+                  padding: EdgeInsets.all(DesignTokens.space6),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Avatar and basic info
-                      _buildClientHeader(client, theme),
-                      const SizedBox(height: 24),
+                      _buildClientHeader(client),
+                      SizedBox(height: DesignTokens.space6),
 
                       // Contact Information
                       _buildSection(
                         'Contact Information',
-                        _buildContactInfo(client, theme),
-                        theme,
+                        _buildContactInfo(client),
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: DesignTokens.space6),
 
                       // Tags
                       _buildSection(
                         'Tags',
                         clientTagsAsync.when(
-                          data: (tags) => _buildTagsSection(tags, theme),
-                          loading: () => const ProgressRing(),
-                          error: (_, __) => const Text('Error loading tags'),
+                          data: (tags) => _buildTagsSection(tags),
+                          loading: () => DesignSystemComponents.skeletonLoader(height: 40),
+                          error: (_, __) => DesignSystemComponents.emptyState(
+                            title: 'Error loading tags',
+                            message: 'Could not load client tags',
+                            icon: FluentIcons.error,
+                            iconColor: DesignTokens.semanticError,
+                          ),
                         ),
-                        theme,
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: DesignTokens.space6),
 
                       // Recent Campaigns
                       _buildSection(
                         'Recent Campaigns',
                         clientCampaignsAsync.when(
-                          data: (campaigns) => _buildCampaignsSection(campaigns, theme),
-                          loading: () => const ProgressRing(),
-                          error: (_, __) => const Text('Error loading campaigns'),
+                          data: (campaigns) => _buildCampaignsSection(campaigns),
+                          loading: () => DesignSystemComponents.skeletonLoader(height: 120),
+                          error: (_, __) => DesignSystemComponents.emptyState(
+                            title: 'Error loading campaigns',
+                            message: 'Could not load client campaigns',
+                            icon: FluentIcons.error,
+                            iconColor: DesignTokens.semanticError,
+                          ),
                         ),
-                        theme,
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: DesignTokens.space6),
 
                       // Notes
                       if (client.notes?.isNotEmpty == true || _isEditing)
                         _buildSection(
                           'Notes',
-                          _buildNotesSection(client, theme),
-                          theme,
+                          _buildNotesSection(client),
                         ),
+                      
                       // Activity Timeline
-                      const SizedBox(height: 24),
+                      SizedBox(height: DesignTokens.space6),
                       _buildSection(
                         'Activity Timeline',
                         ClientActivityTimeline(clientId: widget.clientId),
-                        theme,
                       ),
                     ],
                   ),
                 );
               },
-              loading: () => const Center(child: ProgressRing()),
-              error: (error, stack) => Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(FluentIcons.error, size: 48, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text('Error loading client: $error'),
-                  ],
-                ),
+              loading: () => DesignSystemComponents.loadingIndicator(
+                message: 'Loading client details...',
+              ),
+              error: (error, stack) => DesignSystemComponents.emptyState(
+                title: 'Error loading client',
+                message: error.toString(),
+                icon: FluentIcons.error,
+                iconColor: DesignTokens.semanticError,
+                actionText: 'Retry',
+                onAction: () => ref.invalidate(clientByIdProvider(widget.clientId)),
               ),
             ),
           ),
@@ -213,185 +291,200 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
     );
   }
 
-  Widget _buildClientHeader(ClientModel client, FluentThemeData theme) {
-    return Row(
-      children: [
-        // Avatar
-        Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            color: theme.accentColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(32),
-            border: Border.all(
-              color: theme.accentColor.withValues(alpha: 0.3),
-              width: 2,
+  Widget _buildClientHeader(ClientModel client) {
+    return DesignSystemComponents.standardCard(
+      padding: EdgeInsets.all(DesignTokens.space4),
+      child: Row(
+        children: [
+          // Avatar
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  DesignTokens.accentPrimary.withValues(alpha: 0.15),
+                  DesignTokens.accentPrimary.withValues(alpha: 0.08),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(DesignTokens.radiusRound),
+              border: Border.all(
+                color: DesignTokens.accentPrimary.withValues(alpha: 0.3),
+                width: 2,
+              ),
             ),
-          ),
-          child: Center(
-            child: Text(
-              _getInitials(client.fullName),
-              style: TextStyle(
-                color: theme.accentColor,
-                fontWeight: FontWeight.w600,
-                fontSize: 24,
+            child: Center(
+              child: Text(
+                _getInitials(client.fullName),
+                style: DesignTextStyles.titleLarge.copyWith(
+                  color: DesignTokens.accentPrimary,
+                  fontWeight: DesignTokens.fontWeightBold,
+                ),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 16),
+          SizedBox(width: DesignTokens.space4),
 
-        // Name and company
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_isEditing) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextBox(
-                        controller: _firstNameController,
-                        placeholder: 'First Name',
+          // Name and company
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_isEditing) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DesignSystemComponents.textInput(
+                          controller: _firstNameController,
+                          label: 'First Name',
+                          placeholder: 'First Name',
+                        ),
+                      ),
+                      SizedBox(width: DesignTokens.space2),
+                      Expanded(
+                        child: DesignSystemComponents.textInput(
+                          controller: _lastNameController,
+                          label: 'Last Name',
+                          placeholder: 'Last Name',
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: DesignTokens.space2),
+                  DesignSystemComponents.textInput(
+                    controller: _companyController,
+                    label: 'Company',
+                    placeholder: 'Company',
+                  ),
+                  SizedBox(height: DesignTokens.space2),
+                  DesignSystemComponents.textInput(
+                    controller: _jobTitleController,
+                    label: 'Job Title',
+                    placeholder: 'Job Title',
+                  ),
+                ] else ...[
+                  Text(
+                    client.fullName,
+                    style: DesignTextStyles.titleLarge.copyWith(
+                      fontWeight: DesignTokens.fontWeightBold,
+                    ),
+                  ),
+                  if (client.jobTitle != null && client.company != null) ...[
+                    SizedBox(height: DesignTokens.space1),
+                    Text(
+                      '${client.jobTitle} at ${client.company}',
+                      style: DesignTextStyles.body.copyWith(
+                        color: DesignTokens.textSecondary,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextBox(
-                        controller: _lastNameController,
-                        placeholder: 'Last Name',
+                  ] else if (client.company != null) ...[
+                    SizedBox(height: DesignTokens.space1),
+                    Text(
+                      client.company!,
+                      style: DesignTextStyles.body.copyWith(
+                        color: DesignTokens.textSecondary,
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 8),
-                TextBox(
-                  controller: _companyController,
-                  placeholder: 'Company',
-                ),
-                const SizedBox(height: 8),
-                TextBox(
-                  controller: _jobTitleController,
-                  placeholder: 'Job Title',
-                ),
-              ] else ...[
-                Text(
-                  client.fullName,
-                  style: theme.typography.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (client.jobTitle != null && client.company != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    '${client.jobTitle} at ${client.company}',
-                    style: theme.typography.body?.copyWith(
-                      color: theme.resources.textFillColorSecondary,
-                    ),
-                  ),
-                ] else if (client.company != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    client.company!,
-                    style: theme.typography.body?.copyWith(
-                      color: theme.resources.textFillColorSecondary,
-                    ),
-                  ),
                 ],
               ],
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildSection(String title, Widget content, FluentThemeData theme) {
+  Widget _buildSection(String title, Widget content) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: theme.typography.bodyStrong?.copyWith(
+          style: DesignTextStyles.bodyLarge.copyWith(
             fontSize: 16,
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: DesignTokens.space3),
         content,
       ],
     );
   }
 
-  Widget _buildContactInfo(ClientModel client, FluentThemeData theme) {
-    return Column(
-      children: [
-        if (_isEditing) ...[
-          TextBox(
-            controller: _emailController,
-            placeholder: 'Email',
-            prefix: const Icon(FluentIcons.mail),
-          ),
-          const SizedBox(height: 12),
-          TextBox(
-            controller: _phoneController,
-            placeholder: 'Phone',
-            prefix: const Icon(FluentIcons.phone),
-          ),
-          const SizedBox(height: 12),
-          TextBox(
-            controller: _addressController,
-            placeholder: 'Address',
-            prefix: const Icon(FluentIcons.location),
-            maxLines: 2,
-          ),
-        ] else ...[
-          if (client.email != null)
-            _buildInfoRow(FluentIcons.mail, 'Email', client.email!, theme),
-          if (client.phone != null) ...[
-            if (client.email != null) const SizedBox(height: 8),
-            _buildInfoRow(FluentIcons.phone, 'Phone', client.phone!, theme),
-          ],
-          if (client.address != null) ...[
-            if (client.email != null || client.phone != null) const SizedBox(height: 8),
-            _buildInfoRow(FluentIcons.location, 'Address', client.address!, theme),
-          ],
-          if (client.email == null && client.phone == null && client.address == null)
-            Text(
-              'No contact information available',
-              style: theme.typography.body?.copyWith(
-                color: theme.resources.textFillColorSecondary,
-                fontStyle: FontStyle.italic,
-              ),
+  Widget _buildContactInfo(ClientModel client) {
+    return DesignSystemComponents.standardCard(
+      padding: EdgeInsets.all(DesignTokens.space4),
+      child: Column(
+        children: [
+          if (_isEditing) ...[
+            DesignSystemComponents.textInput(
+              controller: _emailController,
+              label: 'Email',
+              placeholder: 'Email',
+              prefixIcon: FluentIcons.mail,
             ),
+            SizedBox(height: DesignTokens.space3),
+            DesignSystemComponents.textInput(
+              controller: _phoneController,
+              label: 'Phone',
+              placeholder: 'Phone',
+              prefixIcon: FluentIcons.phone,
+            ),
+            SizedBox(height: DesignTokens.space3),
+            DesignSystemComponents.textInput(
+              controller: _addressController,
+              label: 'Address',
+              placeholder: 'Address',
+              prefixIcon: FluentIcons.location,
+              maxLines: 2,
+            ),
+          ] else ...[
+            if (client.email != null)
+              _buildInfoRow(FluentIcons.mail, 'Email', client.email!),
+            if (client.phone != null) ...[
+              if (client.email != null) SizedBox(height: DesignTokens.space2),
+              _buildInfoRow(FluentIcons.phone, 'Phone', client.phone!),
+            ],
+            if (client.address != null) ...[
+              if (client.email != null || client.phone != null) SizedBox(height: DesignTokens.space2),
+              _buildInfoRow(FluentIcons.location, 'Address', client.address!),
+            ],
+            if (client.email == null && client.phone == null && client.address == null)
+              DesignSystemComponents.emptyState(
+                title: 'No contact information',
+                message: 'No contact information available for this client',
+                icon: FluentIcons.contact_info,
+              ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value, FluentThemeData theme) {
+  Widget _buildInfoRow(IconData icon, String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(
           icon,
-          size: 16,
-          color: theme.resources.textFillColorSecondary,
+          size: DesignTokens.iconSizeSmall,
+          color: DesignTokens.textSecondary,
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: DesignTokens.space3),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 label,
-                style: theme.typography.caption?.copyWith(
-                  color: theme.resources.textFillColorSecondary,
+                style: DesignTextStyles.caption.copyWith(
+                  color: DesignTokens.textSecondary,
                 ),
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: DesignTokens.space1),
               Text(
                 value,
-                style: theme.typography.body,
+                style: DesignTextStyles.body,
               ),
             ],
           ),
@@ -400,142 +493,125 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
     );
   }
 
-  Widget _buildTagsSection(List<TagModel> tags, FluentThemeData theme) {
+  Widget _buildTagsSection(List<TagModel> tags) {
     if (tags.isEmpty) {
-      return Text(
-        'No tags assigned',
-        style: theme.typography.body?.copyWith(
-          color: theme.resources.textFillColorSecondary,
-          fontStyle: FontStyle.italic,
-        ),
+      return DesignSystemComponents.emptyState(
+        title: 'No tags assigned',
+        message: 'This client has no tags assigned',
+        icon: FluentIcons.tag,
       );
     }
 
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: tags.map((tag) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: theme.accentColor.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: theme.accentColor.withValues(alpha: 0.3),
-          ),
-        ),
-        child: Text(
-          tag.name,
-          style: TextStyle(
-            fontSize: 12,
-            color: theme.accentColor,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      )).toList(),
+    return DesignSystemComponents.standardCard(
+      padding: EdgeInsets.all(DesignTokens.space4),
+      child: Wrap(
+        spacing: DesignTokens.space2,
+        runSpacing: DesignTokens.space2,
+        children: tags.map((tag) => DesignSystemComponents.statusBadge(
+          text: tag.name,
+          type: SemanticColorType.info,
+        )).toList(),
+      ),
     );
   }
 
-  Widget _buildCampaignsSection(List<dynamic> campaigns, FluentThemeData theme) {
+  Widget _buildCampaignsSection(List<dynamic> campaigns) {
     if (campaigns.isEmpty) {
-      return Text(
-        'No campaigns yet',
-        style: theme.typography.body?.copyWith(
-          color: theme.resources.textFillColorSecondary,
-          fontStyle: FontStyle.italic,
-        ),
+      return DesignSystemComponents.emptyState(
+        title: 'No campaigns yet',
+        message: 'This client has not been included in any campaigns',
+        icon: FluentIcons.send,
       );
     }
 
-    return Column(
-      children: campaigns.take(5).map((campaign) => Container(
-        padding: const EdgeInsets.all(12),
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: theme.resources.cardBackgroundFillColorSecondary,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: theme.resources.dividerStrokeColorDefault.withValues(alpha: 0.3),
+    return DesignSystemComponents.standardCard(
+      padding: EdgeInsets.all(DesignTokens.space4),
+      child: Column(
+        children: campaigns.take(5).map((campaign) => Container(
+          padding: EdgeInsets.all(DesignTokens.space3),
+          margin: EdgeInsets.only(bottom: DesignTokens.space2),
+          decoration: BoxDecoration(
+            color: DesignTokens.surfaceSecondary,
+            borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+            border: Border.all(
+              color: DesignTokens.neutralGray200,
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              FluentIcons.send,
-              size: 16,
-              color: theme.resources.textFillColorSecondary,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Campaign Name', // TODO: Use actual campaign name
-                    style: theme.typography.bodyStrong,
+          child: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(DesignTokens.space2),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      DesignTokens.accentPrimary.withValues(alpha: 0.15),
+                      DesignTokens.accentPrimary.withValues(alpha: 0.08),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Sent 2 days ago', // TODO: Use actual date
-                    style: theme.typography.caption?.copyWith(
-                      color: theme.resources.textFillColorSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'Sent',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.green,
-                  fontWeight: FontWeight.w600,
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                ),
+                child: Icon(
+                  FluentIcons.send,
+                  size: DesignTokens.iconSizeSmall,
+                  color: DesignTokens.accentPrimary,
                 ),
               ),
-            ),
-          ],
-        ),
-      )).toList(),
+              SizedBox(width: DesignTokens.space3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Campaign Name', // TODO: Use actual campaign name
+                      style: DesignTextStyles.bodyLarge,
+                    ),
+                    SizedBox(height: DesignTokens.space1),
+                    Text(
+                      'Sent 2 days ago', // TODO: Use actual date
+                      style: DesignTextStyles.caption.copyWith(
+                        color: DesignTokens.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              DesignSystemComponents.statusBadge(
+                text: 'Sent',
+                type: SemanticColorType.success,
+              ),
+            ],
+          ),
+        )).toList(),
+      ),
     );
   }
 
-  Widget _buildNotesSection(ClientModel client, FluentThemeData theme) {
+  Widget _buildNotesSection(ClientModel client) {
     if (_isEditing) {
-      return TextBox(
-        controller: _notesController,
-        placeholder: 'Add notes about this client...',
-        maxLines: 4,
+      return DesignSystemComponents.standardCard(
+        padding: EdgeInsets.all(DesignTokens.space4),
+        child: DesignSystemComponents.textInput(
+          controller: _notesController,
+          label: 'Notes',
+          placeholder: 'Add notes about this client...',
+          maxLines: 4,
+        ),
       );
     }
 
     if (client.notes?.isEmpty ?? true) {
-      return Text(
-        'No notes available',
-        style: theme.typography.body?.copyWith(
-          color: theme.resources.textFillColorSecondary,
-          fontStyle: FontStyle.italic,
-        ),
+      return DesignSystemComponents.emptyState(
+        title: 'No notes available',
+        message: 'No notes have been added for this client',
+        icon: FluentIcons.edit_note,
       );
     }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.resources.cardBackgroundFillColorSecondary,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: theme.resources.dividerStrokeColorDefault.withValues(alpha: 0.3),
-        ),
-      ),
+    return DesignSystemComponents.standardCard(
+      padding: EdgeInsets.all(DesignTokens.space4),
       child: Text(
         client.notes!,
-        style: theme.typography.body,
+        style: DesignTextStyles.body,
       ),
     );
   }

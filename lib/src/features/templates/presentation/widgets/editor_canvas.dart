@@ -23,143 +23,274 @@ class EditorCanvas extends ConsumerWidget {
 
     return Column(
       children: [
-        // Canvas Header
+        // Enhanced Canvas Header
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.cardColor,
+                theme.cardColor.withValues(alpha: 0.95),
+              ],
+            ),
             border: Border(
               bottom: BorderSide(
-                color: theme.accentColor,
+                color: theme.accentColor.withValues(alpha: 0.15),
                 width: 1,
               ),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: theme.accentColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  gradient: LinearGradient(
+                    colors: editorState.isPreviewMode
+                        ? [
+                            const Color(0xFF4CAF50).withValues(alpha: 0.15),
+                            const Color(0xFF4CAF50).withValues(alpha: 0.08),
+                          ]
+                        : [
+                            theme.accentColor.withValues(alpha: 0.15),
+                            theme.accentColor.withValues(alpha: 0.08),
+                          ],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: editorState.isPreviewMode
+                        ? const Color(0xFF4CAF50).withValues(alpha: 0.3)
+                        : theme.accentColor.withValues(alpha: 0.2),
+                  ),
                 ),
                 child: Icon(
                   editorState.isPreviewMode 
                       ? FluentIcons.preview 
                       : FluentIcons.canvas_app_template32,
-                  size: 20,
-                  color: theme.accentColor,
+                  size: 22,
+                  color: editorState.isPreviewMode
+                      ? const Color(0xFF4CAF50)
+                      : theme.accentColor,
                 ),
               ),
-              const SizedBox(width: 12),
-              Text(
-                editorState.isPreviewMode ? 'Preview' : 'Canvas',
-                style: theme.typography.subtitle,
-              ),
-              const SizedBox(width: 8),
-              // Template type indicator
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _getTemplateTypeColor(editorState.templateType).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      _getTemplateTypeIcon(editorState.templateType),
-                      size: 12,
-                      color: _getTemplateTypeColor(editorState.templateType),
+                    Row(
+                      children: [
+                        Text(
+                          editorState.isPreviewMode ? 'Live Preview' : 'Design Canvas',
+                          style: theme.typography.subtitle?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Template type indicator with enhanced styling
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                _getTemplateTypeColor(editorState.templateType).withValues(alpha: 0.15),
+                                _getTemplateTypeColor(editorState.templateType).withValues(alpha: 0.08),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _getTemplateTypeColor(editorState.templateType).withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _getTemplateTypeIcon(editorState.templateType),
+                                size: 12,
+                                color: _getTemplateTypeColor(editorState.templateType),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                editorState.templateType.name.toUpperCase(),
+                                style: TextStyle(
+                                  color: _getTemplateTypeColor(editorState.templateType),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      editorState.templateType.name.toUpperCase(),
-                      style: TextStyle(
-                        color: _getTemplateTypeColor(editorState.templateType),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          editorState.isPreviewMode 
+                              ? 'See how your template will look to recipients'
+                              : 'Drag blocks from the toolbox to build your template',
+                          style: theme.typography.caption?.copyWith(
+                            color: theme.inactiveColor,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              const Spacer(),
-              if (!editorState.isPreviewMode) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: theme.accentColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${editorState.blocks.length} blocks',
-                    style: TextStyle(
-                      color: theme.accentColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              if (editorState.usedPlaceholders.isNotEmpty) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: theme.accentColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        FluentIcons.variable,
-                        size: 12,
-                        color: theme.accentColor,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${editorState.usedPlaceholders.length}',
-                        style: TextStyle(
-                          color: theme.accentColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
+              // Enhanced stats and controls
+              Row(
+                children: [
+                  if (!editorState.isPreviewMode) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: theme.accentColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.accentColor.withValues(alpha: 0.15),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              Button(
-                onPressed: () => ref.read(templateEditorProvider.notifier).togglePreviewMode(),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      editorState.isPreviewMode ? FluentIcons.edit : FluentIcons.preview,
-                      size: 14,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            FluentIcons.build_definition,
+                            size: 12,
+                            color: theme.accentColor,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${editorState.blocks.length}',
+                            style: TextStyle(
+                              color: theme.accentColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 4),
-                    Text(editorState.isPreviewMode ? 'Edit' : 'Preview'),
+                    const SizedBox(width: 8),
                   ],
-                ),
+                  if (editorState.usedPlaceholders.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF9C27B0).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFF9C27B0).withValues(alpha: 0.15),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            FluentIcons.variable,
+                            size: 12,
+                            color: const Color(0xFF9C27B0),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${editorState.usedPlaceholders.length}',
+                            style: const TextStyle(
+                              color: Color(0xFF9C27B0),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  // Enhanced preview toggle button
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: editorState.isPreviewMode
+                            ? [
+                                theme.accentColor.withValues(alpha: 0.15),
+                                theme.accentColor.withValues(alpha: 0.08),
+                              ]
+                            : [
+                                const Color(0xFF4CAF50).withValues(alpha: 0.15),
+                                const Color(0xFF4CAF50).withValues(alpha: 0.08),
+                              ],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: editorState.isPreviewMode
+                            ? theme.accentColor.withValues(alpha: 0.3)
+                            : const Color(0xFF4CAF50).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Button(
+                      onPressed: () => ref.read(templateEditorProvider.notifier).togglePreviewMode(),
+                      style: ButtonStyle(
+                        backgroundColor: WidgetStateProperty.all(Colors.transparent),
+                        padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            editorState.isPreviewMode ? FluentIcons.edit : FluentIcons.preview,
+                            size: 14,
+                            color: editorState.isPreviewMode
+                                ? theme.accentColor
+                                : const Color(0xFF4CAF50),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            editorState.isPreviewMode ? 'Edit' : 'Preview',
+                            style: TextStyle(
+                              color: editorState.isPreviewMode
+                                  ? theme.accentColor
+                                  : const Color(0xFF4CAF50),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
         
-        // Canvas Content
+        // Enhanced Canvas Content
         Expanded(
           child: Container(
             margin: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: _getCanvasBackgroundColor(editorState.templateType),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: theme.accentColor,
+                color: theme.accentColor.withValues(alpha: 0.15),
                 width: 1,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: editorState.blocks.isEmpty
                 ? _buildEmptyState(context, ref, dragDropState.isDragging, editorState.templateType)
@@ -210,11 +341,16 @@ class EditorCanvas extends ConsumerWidget {
         final isHovering = candidateData.isNotEmpty;
         
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: const Duration(milliseconds: 300),
           decoration: BoxDecoration(
-            color: isHovering
-                ? theme.accentColor.withValues(alpha: 0.05)
-                : Colors.transparent,
+            gradient: isHovering
+                ? LinearGradient(
+                    colors: [
+                      theme.accentColor.withValues(alpha: 0.08),
+                      theme.accentColor.withValues(alpha: 0.05),
+                    ],
+                  )
+                : null,
             border: isHovering
                 ? Border.all(
                     color: theme.accentColor.withValues(alpha: 0.3),
@@ -222,49 +358,117 @@ class EditorCanvas extends ConsumerWidget {
                     style: BorderStyle.solid,
                   )
                 : null,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.all(16),
+                  duration: const Duration(milliseconds: 300),
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: isHovering
-                        ? theme.accentColor.withValues(alpha: 0.1)
-                        : theme.accentColor.withValues(alpha: 0.05),
+                    gradient: LinearGradient(
+                      colors: isHovering
+                          ? [
+                              theme.accentColor.withValues(alpha: 0.15),
+                              theme.accentColor.withValues(alpha: 0.08),
+                            ]
+                          : [
+                              theme.accentColor.withValues(alpha: 0.08),
+                              theme.accentColor.withValues(alpha: 0.05),
+                            ],
+                    ),
                     borderRadius: BorderRadius.circular(50),
+                    border: Border.all(
+                      color: isHovering
+                          ? theme.accentColor.withValues(alpha: 0.3)
+                          : theme.accentColor.withValues(alpha: 0.15),
+                    ),
                   ),
                   child: Icon(
-                    isHovering ? FluentIcons.add : _getTemplateTypeIcon(templateType ?? TemplateType.email),
-                    size: 48,
+                    isHovering 
+                        ? FluentIcons.add 
+                        : _getTemplateTypeIcon(templateType ?? TemplateType.email),
+                    size: 56,
                     color: isHovering
                         ? theme.accentColor
-                        : theme.inactiveColor,
+                        : theme.accentColor.withValues(alpha: 0.6),
                   ),
                 ),
-                const SizedBox(height: 20),
-                Text(
-                  isHovering
-                      ? 'Drop block here'
-                      : 'Start building your ${templateType?.name ?? 'template'}',
+                const SizedBox(height: 24),
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 300),
                   style: theme.typography.subtitle?.copyWith(
                     color: isHovering
                         ? theme.accentColor
-                        : theme.inactiveColor,
+                        : theme.accentColor.withValues(alpha: 0.8),
+                    fontWeight: FontWeight.w600,
+                  ) ?? const TextStyle(),
+                  child: Text(
+                    isHovering
+                        ? 'Drop block here to get started'
+                        : 'Start building your ${templateType?.name ?? 'template'}',
                   ),
                 ),
-                const SizedBox(height: 8),
-                if (!isHovering)
+                const SizedBox(height: 12),
+                if (!isHovering) ...[
                   Text(
                     _getEmptyStateMessage(templateType),
                     style: theme.typography.body?.copyWith(
                       color: theme.inactiveColor,
+                      fontSize: 13,
                     ),
                     textAlign: TextAlign.center,
                   ),
+                  const SizedBox(height: 32),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          theme.cardColor.withValues(alpha: 0.8),
+                          theme.cardColor.withValues(alpha: 0.6),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: theme.accentColor.withValues(alpha: 0.15),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              FluentIcons.lightbulb,
+                              size: 20,
+                              color: theme.accentColor,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Quick Tips',
+                              style: theme.typography.bodyStrong?.copyWith(
+                                color: theme.accentColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '• Drag blocks from the left panel\n• Use placeholders like {{name}} for dynamic content\n• Preview your template anytime',
+                          style: theme.typography.caption?.copyWith(
+                            color: theme.inactiveColor,
+                            fontSize: 12,
+                            height: 1.4,
+                          ),
+                          textAlign: TextAlign.left,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -367,49 +571,65 @@ class EditorCanvas extends ConsumerWidget {
         final isHovering = candidateData.isNotEmpty;
         
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          height: isHovering ? 40 : 8,
+          duration: const Duration(milliseconds: 200),
+          height: isHovering ? 48 : 8,
           margin: const EdgeInsets.symmetric(vertical: 4),
           decoration: BoxDecoration(
-            color: isHovering
-                ? theme.accentColor.withValues(alpha: 0.1)
-                : Colors.transparent,
+            gradient: isHovering
+                ? LinearGradient(
+                    colors: [
+                      theme.accentColor.withValues(alpha: 0.15),
+                      theme.accentColor.withValues(alpha: 0.08),
+                    ],
+                  )
+                : null,
             border: isHovering
                 ? Border.all(
                     color: theme.accentColor,
                     width: 2,
                     style: BorderStyle.solid,
                   )
-                : null,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: isHovering
-              ? Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        FluentIcons.add,
-                        size: 16,
-                        color: theme.accentColor,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Drop here',
-                        style: TextStyle(
-                          color: theme.accentColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                : Border.all(
+                    color: theme.accentColor.withValues(alpha: 0.2),
+                    width: 1,
+                    style: BorderStyle.none,
                   ),
-                )
-              : null,
-        );
-      },
-    );
-  }
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: isHovering
+            ? Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: theme.accentColor,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Icon(
+                        FluentIcons.add,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Drop block here',
+                      style: TextStyle(
+                        color: theme.accentColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : null,
+      );
+    },
+  );
+}
 
   Widget _buildBlockWrapper(
     BuildContext context,

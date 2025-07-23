@@ -1,10 +1,10 @@
-import 'package:client_connect/src/features/templates/data/template_dao.dart';
 import 'package:client_connect/src/features/templates/data/template_model.dart';
 import 'package:client_connect/src/features/templates/logic/template_providers.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
+import '../../../core/design_system/design_tokens.dart';
+import '../../../core/design_system/component_library.dart';
 
 class TemplateListScreen extends ConsumerStatefulWidget {
   const TemplateListScreen({super.key});
@@ -17,158 +17,175 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
   String _searchQuery = '';
   String _selectedFilter = 'all';
   bool _isRefreshing = false;
+  Key _templateListKey = UniqueKey();
 
   @override
   Widget build(BuildContext context) {
     final templatesAsync = ref.watch(templatesProvider);
-    final theme = FluentTheme.of(context);
 
-    return ScaffoldPage(
-      header: _buildHeader(context, theme),
-      content: Column(
+    // Listen to template operations to refresh list
+    ref.listen<AsyncValue<void>>(templateOperationsProvider, (previous, next) {
+      next.whenOrNull(
+        data: (_) {
+          setState(() {
+            _templateListKey = UniqueKey(); // Force rebuild after operations
+          });
+        },
+      );
+    });
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            DesignTokens.surfacePrimary,
+            DesignTokens.surfacePrimary.withValues(alpha: 0.95),
+          ],
+        ),
+      ),
+      child: Column(
         children: [
-          _buildToolbar(context, theme),
-          const SizedBox(height: 16),
+          _buildHeader(context),
+          SizedBox(height: DesignTokens.space4),
+          _buildToolbar(context),
+          SizedBox(height: DesignTokens.space4),
           Expanded(
             child: templatesAsync.when(
-              data: (templates) => _buildContent(context, ref, templates, theme),
-              loading: () => _buildLoadingState(theme),
-              error: (error, stackTrace) => _buildErrorState(context, theme, error),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context, FluentThemeData theme) {
-    return PageHeader(
-      title: Row(
-        children: [
-          Icon(
-            FluentIcons.text_document,
-            size: 24,
-            color: theme.accentColor,
-          ),
-          const SizedBox(width: 12),
-          const Text('Templates'),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: theme.accentColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: theme.accentColor.withValues(alpha: 0.3),
+              data: (templates) => _buildContent(context, ref, templates),
+              loading: () => DesignSystemComponents.loadingIndicator(
+                message: 'Loading templates...',
               ),
+              error: (error, stackTrace) => _buildErrorState(context, error),
             ),
-            child: Consumer(
-              builder: (context, ref, child) {
-                final templatesAsync = ref.watch(templatesProvider);
-                return templatesAsync.when(
-                  data: (templates) => Text(
-                    '${templates.length} templates',
-                    style: TextStyle(
-                      color: theme.accentColor,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                  loading: () => Text(
-                    'Loading...',
-                    style: TextStyle(
-                      color: theme.accentColor,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                  error: (_, __) => Text(
-                    'Error',
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-      commandBar: CommandBar(
-        primaryItems: [
-          CommandBarButton(
-            icon: Icon(
-              FluentIcons.refresh,
-              color: _isRefreshing ? theme.accentColor : null,
-            ),
-            label: const Text('Refresh'),
-            onPressed: _isRefreshing ? null : _refreshTemplates,
-          ),
-          CommandBarButton(
-            icon: const Icon(FluentIcons.design),
-            label: const Text('Advanced Editor'),
-            onPressed: () => context.pushNamed('editorTemplate'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildToolbar(BuildContext context, FluentThemeData theme) {
+  Widget _buildHeader(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.all(DesignTokens.space6),
       decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.accentColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+        gradient: LinearGradient(
+          colors: [
+            DesignTokens.surfaceSecondary,
+            DesignTokens.surfaceSecondary.withValues(alpha: 0.95),
+          ],
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: DesignTokens.borderPrimary,
+            width: 1,
           ),
-        ],
+        ),
+        boxShadow: DesignTokens.shadowLow,
       ),
       child: Row(
         children: [
-          // Search Box
-          Expanded(
-            flex: 2,
-            child: Container(
-              decoration: BoxDecoration(
-                color: theme.scaffoldBackgroundColor,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: theme.accentColor),
+          Container(
+            padding: EdgeInsets.all(DesignTokens.space3),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  DesignTokens.accentPrimary.withValues(alpha: 0.15),
+                  DesignTokens.accentPrimary.withValues(alpha: 0.08),
+                ],
               ),
-              child: TextBox(
-                placeholder: 'Search templates...',
-                prefix: Padding(
-                  padding: const EdgeInsets.only(left: 12),
-                  child: Icon(
-                    FluentIcons.search,
-                    size: 16,
-                    color: theme.inactiveColor,
+              borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+              border: Border.all(
+                color: DesignTokens.accentPrimary.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Icon(
+              FluentIcons.text_document,
+              size: DesignTokens.iconSizeLarge,
+              color: DesignTokens.accentPrimary,
+            ),
+          ),
+          SizedBox(width: DesignTokens.space4),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Templates',
+                  style: DesignTextStyles.titleLarge.copyWith(
+                    fontWeight: DesignTokens.fontWeightBold,
                   ),
                 ),
-                suffix: _searchQuery.isNotEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: IconButton(
-                          icon: Icon(
-                            FluentIcons.clear,
-                            size: 14,
-                            color: theme.inactiveColor,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _searchQuery = '';
-                            });
-                          },
+                SizedBox(height: DesignTokens.space1),
+                Consumer(
+                  builder: (context, ref, child) {
+                    final templatesAsync = ref.watch(templatesProvider);
+                    return templatesAsync.when(
+                      data: (templates) => Text(
+                        '${templates.length} templates available',
+                        style: DesignTextStyles.body.copyWith(
+                          color: DesignTokens.textSecondary,
                         ),
-                      )
-                    : null,
+                      ),
+                      loading: () => Text(
+                        'Loading templates...',
+                        style: DesignTextStyles.body.copyWith(
+                          color: DesignTokens.textSecondary,
+                        ),
+                      ),
+                      error: (_, __) => Text(
+                        'Error loading templates',
+                        style: DesignTextStyles.body.copyWith(
+                          color: DesignTokens.semanticError,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          Row(
+            children: [
+              DesignSystemComponents.secondaryButton(
+                text: 'Refresh',
+                icon: FluentIcons.refresh,
+                isLoading: _isRefreshing,
+                onPressed: _isRefreshing ? null : _refreshTemplates,
+              ),
+              SizedBox(width: DesignTokens.space3),
+              DesignSystemComponents.primaryButton(
+                text: 'Advanced Editor',
+                icon: FluentIcons.design,
+                onPressed: () => context.pushNamed('editorTemplate'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolbar(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: DesignTokens.space6),
+      child: DesignSystemComponents.standardCard(
+        padding: EdgeInsets.all(DesignTokens.space4),
+        child: Row(
+          children: [
+            // Search Box
+            Expanded(
+              flex: 2,
+              child: DesignSystemComponents.textInput(
+                controller: TextEditingController(text: _searchQuery),
+                placeholder: 'Search templates...',
+                prefixIcon: FluentIcons.search,
+                suffixIcon: _searchQuery.isNotEmpty ? FluentIcons.clear : null,
+                onSuffixIconPressed: _searchQuery.isNotEmpty ? () {
+                  setState(() {
+                    _searchQuery = '';
+                  });
+                } : null,
                 onChanged: (value) {
                   setState(() {
                     _searchQuery = value;
@@ -176,49 +193,35 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
                 },
               ),
             ),
-          ),
-          const SizedBox(width: 16),
-          // Filter Dropdown
-          Container(
-            decoration: BoxDecoration(
-              color: theme.scaffoldBackgroundColor,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: theme.accentColor),
+            SizedBox(width: DesignTokens.space4),
+            // Filter Dropdown
+            SizedBox(
+              width: 140,
+              child: ComboBox<String>(
+                value: _selectedFilter,
+                items: const [
+                  ComboBoxItem(value: 'all', child: Text('All Types')),
+                  ComboBoxItem(value: 'email', child: Text('Email')),
+                  ComboBoxItem(value: 'whatsapp', child: Text('WhatsApp')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _selectedFilter = value;
+                    });
+                  }
+                },
+              ),
             ),
-            child: ComboBox<String>(
-              value: _selectedFilter,
-              items: const [
-                ComboBoxItem(value: 'all', child: Text('All Types')),
-                ComboBoxItem(value: 'email', child: Text('Email')),
-                ComboBoxItem(value: 'whatsapp', child: Text('WhatsApp')),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _selectedFilter = value;
-                  });
-                }
-              },
+            SizedBox(width: DesignTokens.space4),
+            // Quick Actions
+            DesignSystemComponents.primaryButton(
+              text: 'New Template',
+              icon: FluentIcons.add,
+              onPressed: () => context.go('/templates/editor'),
             ),
-          ),
-          const SizedBox(width: 16),
-          // Quick Actions
-          Button(
-            onPressed: () => context.go('/templates/editor'),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  FluentIcons.add,
-                  size: 16,
-                  color: theme.accentColor,
-                ),
-                const SizedBox(width: 6),
-                const Text('New Template'),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -227,196 +230,76 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
     BuildContext context,
     WidgetRef ref,
     List<TemplateModel> templates,
-    FluentThemeData theme,
   ) {
     final filteredTemplates = _filterTemplates(templates);
 
     if (filteredTemplates.isEmpty) {
-      return _buildEmptyState(context, theme);
+      return _buildEmptyState(context);
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: DesignTokens.space6),
       child: GridView.builder(
+        key: _templateListKey,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
+          crossAxisSpacing: DesignTokens.space4,
+          mainAxisSpacing: DesignTokens.space4,
           childAspectRatio: 1.2,
         ),
         itemCount: filteredTemplates.length,
         itemBuilder: (context, index) {
           final template = filteredTemplates[index];
-          return TemplateCard(template: template);
+          return TemplateCard(
+            key: ValueKey(template.id), // Add key for individual cards
+            template: template,
+            onTemplateChanged: () {
+              // Callback to refresh list when template is modified
+              setState(() {
+                _templateListKey = UniqueKey();
+              });
+            },
+          );
         },
       ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, FluentThemeData theme) {
+  Widget _buildEmptyState(BuildContext context) {
     final hasSearchQuery = _searchQuery.isNotEmpty;
     final hasFilter = _selectedFilter != 'all';
 
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                color: theme.accentColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(60),
-              ),
-              child: Icon(
-                hasSearchQuery || hasFilter
-                    ? FluentIcons.search
-                    : FluentIcons.text_document,
-                size: 48,
-                color: theme.accentColor.withValues(alpha: 0.7),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              hasSearchQuery || hasFilter
-                  ? 'No templates found'
-                  : 'No templates yet',
-              style: theme.typography.subtitle?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              hasSearchQuery || hasFilter
-                  ? 'Try adjusting your search or filter criteria'
-                  : 'Create your first template to get started',
-              style: theme.typography.body?.copyWith(
-                color: theme.inactiveColor,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            if (hasSearchQuery || hasFilter) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Button(
-                    onPressed: () {
-                      setState(() {
-                        _searchQuery = '';
-                        _selectedFilter = 'all';
-                      });
-                    },
-                    child: const Text('Clear Filters'),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: () => context.pushNamed('editorTemplate'),
-                    child: const Text('Create Template'),
-                  ),
-                ],
-              ),
-            ] else ...[
-              FilledButton(
-                onPressed: () => context.pushNamed('editorTemplate'),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(FluentIcons.add, size: 16),
-                    SizedBox(width: 8),
-                    Text('Create Your First Template'),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
+    return DesignSystemComponents.emptyState(
+      title: hasSearchQuery || hasFilter
+          ? 'No templates found'
+          : 'No templates yet',
+      message: hasSearchQuery || hasFilter
+          ? 'Try adjusting your search or filter criteria'
+          : 'Create your first template to get started',
+      icon: hasSearchQuery || hasFilter
+          ? FluentIcons.search
+          : FluentIcons.text_document,
+      iconColor: DesignTokens.accentPrimary,
+      actionText: hasSearchQuery || hasFilter ? 'Clear Filters' : 'Create Your First Template',
+      onAction: hasSearchQuery || hasFilter
+          ? () {
+              setState(() {
+                _searchQuery = '';
+                _selectedFilter = 'all';
+              });
+            }
+          : () => context.pushNamed('editorTemplate'),
     );
   }
 
-  Widget _buildLoadingState(FluentThemeData theme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const ProgressRing(),
-          const SizedBox(height: 16),
-          Text(
-            'Loading templates...',
-            style: theme.typography.body?.copyWith(
-              color: theme.inactiveColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState(BuildContext context, FluentThemeData theme, Object error) {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Icon(
-                FluentIcons.error,
-                size: 40,
-                color: Colors.red,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Failed to load templates',
-              style: theme.typography.subtitle?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error.toString(),
-              style: theme.typography.body?.copyWith(
-                color: theme.inactiveColor,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Button(
-                  onPressed: _refreshTemplates,
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(FluentIcons.refresh, size: 16),
-                      SizedBox(width: 6),
-                      Text('Retry'),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton(
-                  onPressed: () => context.pushNamed('editorTemplate'),
-                  child: const Text('Create New Template'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+  Widget _buildErrorState(BuildContext context, Object error) {
+    return DesignSystemComponents.emptyState(
+      title: 'Failed to load templates',
+      message: error.toString(),
+      icon: FluentIcons.error,
+      iconColor: DesignTokens.semanticError,
+      actionText: 'Retry',
+      onAction: _refreshTemplates,
     );
   }
 
@@ -450,11 +333,12 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
     });
 
     try {
-      // Invalidate the provider to trigger a refresh
       ref.invalidate(templatesProvider);
-      
-      // Wait a moment for the refresh to complete
       await Future.delayed(const Duration(milliseconds: 500));
+
+      setState(() {
+        _templateListKey = UniqueKey(); // Force rebuild after refresh
+      });
       
       if (mounted) {
         displayInfoBar(
@@ -491,162 +375,120 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
 
 class TemplateCard extends ConsumerWidget {
   final TemplateModel template;
+  final VoidCallback? onTemplateChanged;
 
-  const TemplateCard({super.key, required this.template});
+  const TemplateCard({super.key, required this.template, this.onTemplateChanged,});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = FluentTheme.of(context);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.accentColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: HoverButton(
-        onPressed: () => context.pushNamed('editeditorTemplate', pathParameters: {'id': template.id.toString()}),
-        builder: (context, states) {
-          final isHovering = states.contains(WidgetState.hovered);
-          
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: isHovering
-                  ? theme.accentColor.withValues(alpha: 0.05)
-                  : Colors.transparent,
-              border: Border.all(
-                color: isHovering
-                    ? theme.accentColor.withValues(alpha: 0.3)
-                    : Colors.transparent,
+    return DesignSystemComponents.standardCard(
+      onTap: () => context.pushNamed('editeditorTemplate', pathParameters: {'id': template.id.toString()}),
+      isHoverable: true,
+      padding: EdgeInsets.all(DesignTokens.space4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with icon and menu
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      _getTypeColor(template.type).withValues(alpha: 0.15),
+                      _getTypeColor(template.type).withValues(alpha: 0.08),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                ),
+                child: Icon(
+                  _getTemplateIcon(template.type),
+                  color: _getTypeColor(template.type),
+                  size: DesignTokens.iconSizeMedium,
+                ),
               ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header with icon and menu
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: _getTypeColor(template.type).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          _getTemplateIcon(template.type),
-                          color: _getTypeColor(template.type),
-                          size: 20,
-                        ),
-                      ),
-                      const Spacer(),
-                      DropDownButton(
-                        leading: Icon(
-                          FluentIcons.more_vertical,
-                          size: 16,
-                          color: theme.inactiveColor,
-                        ),
-                        items: [
-                          MenuFlyoutItem(
-                            leading: const Icon(FluentIcons.edit),
-                            text: const Text('Edit'),
-                            onPressed: () => context.pushNamed('editeditorTemplate', pathParameters: {'id': template.id.toString()}),
-                          ),
-                          MenuFlyoutItem(
-                            leading: const Icon(FluentIcons.design),
-                            text: const Text('Advanced Editor'),
-                            onPressed: () => context.pushNamed('editeditorTemplate', pathParameters: {'id': template.id.toString()}),
-                          ),
-                          const MenuFlyoutSeparator(),
-                          MenuFlyoutItem(
-                            leading: const Icon(FluentIcons.copy),
-                            text: const Text('Duplicate'),
-                            onPressed: () => _duplicateTemplate(context, ref, template),
-                          ),
-                          MenuFlyoutItem(
-                            leading: const Icon(FluentIcons.delete),
-                            text: const Text('Delete'),
-                            onPressed: () => _showDeleteDialog(context, ref, template),
-                          ),
-                        ],
-                      ),
-                    ],
+              const Spacer(),
+              DropDownButton(
+                leading: Icon(
+                  FluentIcons.more_vertical,
+                  size: DesignTokens.iconSizeSmall,
+                  color: DesignTokens.textSecondary,
+                ),
+                items: [
+                  MenuFlyoutItem(
+                    leading: const Icon(FluentIcons.edit),
+                    text: const Text('Edit'),
+                    onPressed: () => context.pushNamed('editeditorTemplate', pathParameters: {'id': template.id.toString()}),
                   ),
-                  const SizedBox(height: 12),
-                  
-                  // Template name
-                  Text(
-                    template.name,
-                    style: theme.typography.bodyStrong?.copyWith(
-                      fontSize: 16,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  MenuFlyoutItem(
+                    leading: const Icon(FluentIcons.design),
+                    text: const Text('Advanced Editor'),
+                    onPressed: () => context.pushNamed('editeditorTemplate', pathParameters: {'id': template.id.toString()}),
                   ),
-                  const SizedBox(height: 6),
-                  
-                  // Subject (if available)
-                  if (template.subject?.isNotEmpty == true) ...[
-                    Text(
-                      template.subject!,
-                      style: theme.typography.body?.copyWith(
-                        color: theme.inactiveColor,
-                        fontSize: 13,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                  ] else ...[
-                    const SizedBox(height: 14),
-                  ],
-                  
-                  const Spacer(),
-                  
-                  // Footer with type and date
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _getTypeColor(template.type).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          template.type.toUpperCase(),
-                          style: TextStyle(
-                            color: _getTypeColor(template.type),
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        _formatDate(template.updatedAt),
-                        style: theme.typography.caption?.copyWith(
-                          color: theme.inactiveColor,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
+                  const MenuFlyoutSeparator(),
+                  MenuFlyoutItem(
+                    leading: const Icon(FluentIcons.copy),
+                    text: const Text('Duplicate'),
+                    onPressed: () => _duplicateTemplate(context, ref, template),
+                  ),
+                  MenuFlyoutItem(
+                    leading: Icon(FluentIcons.delete, color: DesignTokens.semanticError),
+                    text: Text('Delete', style: TextStyle(color: DesignTokens.semanticError)),
+                    onPressed: () => _showDeleteDialog(context, ref, template),
                   ),
                 ],
               ),
+            ],
+          ),
+          SizedBox(height: DesignTokens.space3),
+          
+          // Template name
+          Text(
+            template.name,
+            style: DesignTextStyles.subtitle.copyWith(
+              fontWeight: DesignTokens.fontWeightSemiBold,
             ),
-          );
-        },
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          SizedBox(height: DesignTokens.space1),
+          
+          // Subject (if available)
+          if (template.subject?.isNotEmpty == true) ...[
+            Text(
+              template.subject!,
+              style: DesignTextStyles.body.copyWith(
+                color: DesignTokens.textSecondary,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: DesignTokens.space2),
+          ] else ...[
+            SizedBox(height: DesignTokens.space3),
+          ],
+          
+          const Spacer(),
+          
+          // Footer with type and date
+          Row(
+            children: [
+              DesignSystemComponents.statusBadge(
+                text: template.type.toUpperCase(),
+                type: _getSemanticType(template.type),
+              ),
+              const Spacer(),
+              Text(
+                _formatDate(template.updatedAt),
+                style: DesignTextStyles.caption.copyWith(
+                  color: DesignTokens.textTertiary,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -665,11 +507,22 @@ class TemplateCard extends ConsumerWidget {
   Color _getTypeColor(String type) {
     switch (type.toLowerCase()) {
       case 'email':
-        return Colors.blue;
+        return DesignTokens.semanticInfo;
       case 'whatsapp':
-        return Colors.green;
+        return DesignTokens.semanticSuccess;
       default:
-        return Colors.grey;
+        return DesignTokens.textSecondary;
+    }
+  }
+
+  SemanticColorType _getSemanticType(String type) {
+    switch (type.toLowerCase()) {
+      case 'email':
+        return SemanticColorType.info;
+      case 'whatsapp':
+        return SemanticColorType.success;
+      default:
+        return SemanticColorType.info;
     }
   }
 
@@ -692,9 +545,8 @@ class TemplateCard extends ConsumerWidget {
 
   void _duplicateTemplate(BuildContext context, WidgetRef ref, TemplateModel template) async {
     try {
-      final dao = TemplateDao();
-      await dao.duplicateTemplate(template.id);
-      ref.invalidate(templatesProvider);
+      await ref.read(templateOperationsProvider.notifier).duplicateTemplate(template.id);
+      onTemplateChanged?.call();
       if (context.mounted) {
         displayInfoBar(
           context,
@@ -731,22 +583,30 @@ class TemplateCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Are you sure you want to delete "${template.name}"?'),
-            const SizedBox(height: 8),
+            SizedBox(height: DesignTokens.space2),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(DesignTokens.space3),
               decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                color: DesignTokens.withOpacity(DesignTokens.semanticError, 0.1),
+                borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                border: Border.all(
+                  color: DesignTokens.withOpacity(DesignTokens.semanticError, 0.3),
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(FluentIcons.warning, color: Colors.red, size: 16),
-                  const SizedBox(width: 8),
+                  Icon(
+                    FluentIcons.warning,
+                    color: DesignTokens.semanticError,
+                    size: DesignTokens.iconSizeSmall,
+                  ),
+                  SizedBox(width: DesignTokens.space2),
                   Expanded(
                     child: Text(
                       'This action cannot be undone.',
-                      style: TextStyle(color: Colors.red, fontSize: 12),
+                      style: DesignTextStyles.caption.copyWith(
+                        color: DesignTokens.semanticError,
+                      ),
                     ),
                   ),
                 ],
@@ -755,21 +615,17 @@ class TemplateCard extends ConsumerWidget {
           ],
         ),
         actions: [
-          Button(
-            child: const Text('Cancel'),
+          DesignSystemComponents.secondaryButton(
+            text: 'Cancel',
             onPressed: () => Navigator.of(context).pop(),
           ),
-          FilledButton(
-            style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.all(Colors.red),
-            ),
-            child: const Text('Delete'),
+          DesignSystemComponents.dangerButton(
+            text: 'Delete',
             onPressed: () async {
               Navigator.of(context).pop();
               try {
-                final dao = TemplateDao();
-                await dao.deleteTemplate(template.id);
-                ref.invalidate(templatesProvider);
+                await ref.read(templateOperationsProvider.notifier).deleteTemplate(template.id);
+                onTemplateChanged?.call();
                 if (context.mounted) {
                   displayInfoBar(
                     context,

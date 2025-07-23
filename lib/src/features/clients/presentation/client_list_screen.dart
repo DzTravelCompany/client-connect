@@ -3,13 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/widgets/paginated_list_view.dart';
 import '../../../core/presentation/providers/layout_providers.dart';
+import '../../../core/design_system/design_tokens.dart';
+import '../../../core/design_system/component_library.dart';
 import '../logic/client_providers.dart';
 import '../data/client_model.dart';
 import 'widgets/client_filter_panel.dart';
 import 'widgets/enhanced_client_card.dart';
 import 'widgets/client_details_panel.dart';
 import 'dart:async';
-
 
 class ClientListScreen extends ConsumerStatefulWidget {
   const ClientListScreen({super.key});
@@ -29,6 +30,9 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
   String? _selectedCompany;
   DateTimeRange? _dateRange;
 
+  // Add a key to force rebuild when data changes
+  Key _listKey = UniqueKey();
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -42,6 +46,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       if (mounted) {
         setState(() {
           _searchTerm = value.trim();
+          _listKey = UniqueKey(); // Force rebuild
         });
       }
     });
@@ -56,6 +61,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       if (tags != null) _selectedTags = tags;
       if (company != null) _selectedCompany = company;
       if (dateRange != null) _dateRange = dateRange;
+      _listKey = UniqueKey(); // Force rebuild
     });
   }
 
@@ -66,6 +72,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       _selectedCompany = null;
       _dateRange = null;
       _searchController.clear();
+      _listKey = UniqueKey(); // Force rebuild
     });
   }
 
@@ -109,215 +116,234 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
     final detailPanelState = ref.watch(detailPanelStateProvider);
 
-    return ScaffoldPage(
-      padding: EdgeInsets.zero,
-      content: Container(
-        color: theme.scaffoldBackgroundColor,
-        child: Row(
-          children: [
-            // Left Column: Filter Panel
-            Container(
-              width: 320,
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                border: Border(
-                  right: BorderSide(
-                    color: theme.resources.dividerStrokeColorDefault,
-                    width: 1,
+    // Listen to client form state to refresh list when clients are saved
+    ref.listen<ClientFormState>(clientFormProvider, (previous, next) {
+      if (previous?.isSaved != next.isSaved && next.isSaved) {
+        setState(() {
+          _listKey = UniqueKey(); // Force rebuild when client is saved
+        });
+      }
+    });
+
+    // Listen to bulk operations to refresh list
+    ref.listen<ClientBulkOperationsState>(clientBulkOperationsProvider, (previous, next) {
+      if (previous?.successMessage != next.successMessage && next.successMessage != null) {
+        setState(() {
+          _listKey = UniqueKey(); // Force rebuild after bulk operations
+          _selectedClientIds.clear(); // Clear selection
+        });
+      }
+    });
+
+    return Container(
+      color: DesignTokens.surfacePrimary,
+      child: Column(
+        children: [
+          _buildClientListHeader(),
+          Expanded(
+            child: Row(
+              children: [
+                // Left Column: Filter Panel
+                Container(
+                  width: 320,
+                  decoration: BoxDecoration(
+                    color: DesignTokens.surfaceSecondary,
+                    border: Border(
+                      right: BorderSide(
+                        color: DesignTokens.borderPrimary,
+                        width: 1,
+                      ),
+                    ),
+                    boxShadow: DesignTokens.shadowLow,
+                  ),
+                  child: ClientFilterPanel(
+                    searchController: _searchController,
+                    onSearchChanged: _onSearchChanged,
+                    selectedTags: _selectedTags,
+                    selectedCompany: _selectedCompany,
+                    dateRange: _dateRange,
+                    onFilterChanged: _onFilterChanged,
+                    onClearFilters: _clearFilters,
                   ),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(2, 0),
-                  ),
-                ],
-              ),
-              child: ClientFilterPanel(
-                searchController: _searchController,
-                onSearchChanged: _onSearchChanged,
-                selectedTags: _selectedTags,
-                selectedCompany: _selectedCompany,
-                dateRange: _dateRange,
-                onFilterChanged: _onFilterChanged,
-                onClearFilters: _clearFilters,
-              ),
-            ),
 
-            // Center Column: Client Cards
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                constraints: const BoxConstraints(minWidth: 0),
-                child: Column(
-                  children: [
-                    // Header with actions
-                    SizedBox(
-                      width: double.infinity,
-                      child: _buildClientListHeader(theme),
-                    ),
-                    const SizedBox(height: 16),
+                // Center Column: Client Cards
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(DesignTokens.space4),
+                    constraints: const BoxConstraints(minWidth: 0),
+                    child: Column(
+                      children: [
+                        // Bulk actions bar
+                        if (_selectedClientIds.isNotEmpty) ...[
+                          SizedBox(
+                            width: double.infinity,
+                            child: _buildBulkActionsBar(),
+                          ),
+                          SizedBox(height: DesignTokens.space3),
+                        ],
 
-                    // Bulk actions bar
-                    if (_selectedClientIds.isNotEmpty) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: _buildBulkActionsBar(theme),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-
-                    // Client cards list
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) => PaginatedListView<ClientModel>(
-                          key: ValueKey('${_searchTerm}_${_selectedTags.join(',')}_${_selectedCompany}_${_dateRange?.toString()}_${_sortBy}_$_sortAscending'),
-                          loadData: _loadClients,
-                          pageSize: 20,
-                          searchQuery: _searchTerm,
-                          itemBuilder: (client, index) => ConstrainedBox(
-                            constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-                            child: EnhancedClientCard(
-                              client: client,
-                              isSelected: _selectedClientIds.contains(client.id),
-                              onTap: () => _onClientSelected(client.id),
-                              onSelectionChanged: (selected) => _toggleClientSelection(client.id),
-                              showSelection: _selectedClientIds.isNotEmpty,
+                        // Client cards list
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) => PaginatedListView<ClientModel>(
+                              key: _listKey, // Use the key to force rebuilds
+                              loadData: _loadClients,
+                              pageSize: 20,
+                              searchQuery: _searchTerm,
+                              itemBuilder: (client, index) => ConstrainedBox(
+                                constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                                child: EnhancedClientCard(
+                                  client: client,
+                                  isSelected: _selectedClientIds.contains(client.id),
+                                  onTap: () => _onClientSelected(client.id),
+                                  onSelectionChanged: (selected) => _toggleClientSelection(client.id),
+                                  showSelection: _selectedClientIds.isNotEmpty,
+                                ),
+                              ),
+                              emptyBuilder: () => _buildEmptyState(),
+                              errorBuilder: (error) => _buildErrorState(error),
                             ),
                           ),
-                          emptyBuilder: () => _buildEmptyState(theme),
-                          errorBuilder: (error) => _buildErrorState(theme, error),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Right Column: Client Details Panel
-            if (detailPanelState.isVisible && detailPanelState.type == DetailPanelType.client)
-              Container(
-                width: 400,
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  border: Border(
-                    left: BorderSide(
-                      color: theme.resources.dividerStrokeColorDefault,
-                      width: 1,
+                      ],
                     ),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(-2, 0),
+                ),
+
+                // Right Column: Client Details Panel
+                if (detailPanelState.isVisible && detailPanelState.type == DetailPanelType.client)
+                  Container(
+                    width: 400,
+                    decoration: BoxDecoration(
+                      color: DesignTokens.surfaceSecondary,
+                      border: Border(
+                        left: BorderSide(
+                          color: DesignTokens.borderPrimary,
+                          width: 1,
+                        ),
+                      ),
+                      boxShadow: DesignTokens.shadowLow,
                     ),
-                  ],
-                ),
-                child: ClientDetailsPanel(
-                  clientId: int.parse(detailPanelState.selectedItemId!),
-                  onClose: () => ref.read(detailPanelStateProvider.notifier).hidePanel(),
-                ),
-              ),
-          ],
-        ),
+                    child: ClientDetailsPanel(
+                      clientId: int.parse(detailPanelState.selectedItemId!),
+                      onClose: () => ref.read(detailPanelStateProvider.notifier).hidePanel(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildClientListHeader(FluentThemeData theme) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final availableWidth = constraints.maxWidth;
-        final isNarrow = availableWidth < 600;
-        
-        if (isNarrow) {
-          // Stack layout for narrow screens
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title section
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Clients',
-                    style: theme.typography.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
+  Widget _buildClientListHeader() {
+    return Container(
+      padding: const EdgeInsets.all(DesignTokens.space6),
+      decoration: BoxDecoration(
+        color: DesignTokens.surfaceSecondary,
+        border: Border(
+          bottom: BorderSide(
+            color: DesignTokens.borderPrimary,
+            width: 1,
+          ),
+        ),
+        boxShadow: DesignTokens.shadowLow,
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final availableWidth = constraints.maxWidth;
+          final isNarrow = availableWidth < 600;
+          
+          if (isNarrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(DesignTokens.space2),
+                      decoration: BoxDecoration(
+                        color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.1),
+                        borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                        border: Border.all(
+                          color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.2),
+                        ),
+                      ),
+                      child: Icon(
+                        FluentIcons.people,
+                        size: DesignTokens.iconSizeLarge,
+                        color: DesignTokens.accentPrimary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Manage your client relationships',
-                    style: theme.typography.body?.copyWith(
-                      color: theme.resources.textFillColorSecondary,
+                    SizedBox(width: DesignTokens.space3),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Clients',
+                            style: DesignTextStyles.titleLarge.copyWith(
+                              fontWeight: DesignTokens.fontWeightSemiBold,
+                            ),
+                          ),
+                          SizedBox(height: DesignTokens.space1),
+                          Text(
+                            'Manage your client relationships',
+                            style: DesignTextStyles.body.copyWith(
+                              color: DesignTokens.textSecondary,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              // Controls section - stacked for narrow screens
+              SizedBox(height: DesignTokens.space4),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
                     children: [
                       Expanded(
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: ComboBox<String>(
-                            value: _sortBy,
-                            items: const [
-                              ComboBoxItem(value: 'name', child: Text('Name')),
-                              ComboBoxItem(value: 'company', child: Text('Company')),
-                              ComboBoxItem(value: 'created', child: Text('Created')),
-                              ComboBoxItem(value: 'updated', child: Text('Updated')),
-                            ],
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() {
-                                  _sortBy = value;
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: IconButton(
-                          icon: Icon(_sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down),
-                          onPressed: () {
-                            setState(() {
-                              _sortAscending = !_sortAscending;
-                            });
+                        child: ComboBox<String>(
+                          value: _sortBy,
+                          items: const [
+                            ComboBoxItem(value: 'name', child: Text('Name')),
+                            ComboBoxItem(value: 'company', child: Text('Company')),
+                            ComboBoxItem(value: 'created', child: Text('Created')),
+                            ComboBoxItem(value: 'updated', child: Text('Updated')),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() {
+                                _sortBy = value;
+                              });
+                            }
                           },
                         ),
                       ),
+                      SizedBox(width: DesignTokens.space2),
+                      DesignSystemComponents.secondaryButton(
+                        text: '',
+                        icon: _sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down,
+                        onPressed: () {
+                          setState(() {
+                            _sortAscending = !_sortAscending;
+                          });
+                        },
+                        tooltip: _sortAscending ? 'Sort descending' : 'Sort ascending',
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () => context.go('/clients/add'),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(FluentIcons.add, size: 16),
-                          SizedBox(width: 4),
-                          Text('Add Client'),
-                        ],
-                      ),
-                    ),
+                  SizedBox(height: DesignTokens.space3),
+                  DesignSystemComponents.primaryButton(
+                    text: 'Add Client',
+                    icon: FluentIcons.add,
+                    onPressed: () => context.go('/clients/add'),
                   ),
                 ],
               ),
@@ -325,30 +351,44 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
           );
         }
         
-        // Wide layout for normal screens
         return Row(
           children: [
+            Container(
+              padding: const EdgeInsets.all(DesignTokens.space2),
+              decoration: BoxDecoration(
+                color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.1),
+                borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                border: Border.all(
+                  color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.2),
+                ),
+              ),
+              child: Icon(
+                FluentIcons.people,
+                size: DesignTokens.iconSizeLarge,
+                color: DesignTokens.accentPrimary,
+              ),
+            ),
+            SizedBox(width: DesignTokens.space3),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Clients',
-                    style: theme.typography.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
+                    style: DesignTextStyles.titleLarge.copyWith(
+                      fontWeight: DesignTokens.fontWeightSemiBold,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: DesignTokens.space1),
                   Text(
                     'Manage your client relationships',
-                    style: theme.typography.body?.copyWith(
-                      color: theme.resources.textFillColorSecondary,
+                    style: DesignTextStyles.body.copyWith(
+                      color: DesignTokens.textSecondary,
                     ),
                   ),
                 ],
               ),
             ),
-            // Controls with proper constraints
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -371,51 +411,35 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                     },
                   ),
                 ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: IconButton(
-                    icon: Icon(_sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down),
-                    onPressed: () {
-                      setState(() {
-                        _sortAscending = !_sortAscending;
-                      });
-                    },
-                  ),
+                SizedBox(width: DesignTokens.space2),
+                DesignSystemComponents.secondaryButton(
+                  text: '',
+                  icon: _sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down,
+                  onPressed: () {
+                    setState(() {
+                      _sortAscending = !_sortAscending;
+                    });
+                  },
+                  tooltip: _sortAscending ? 'Sort descending' : 'Sort ascending',
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
+                SizedBox(width: DesignTokens.space3),
+                DesignSystemComponents.primaryButton(
+                  text: 'Add',
+                  icon: FluentIcons.add,
                   onPressed: () => context.go('/clients/add'),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(FluentIcons.add, size: 16),
-                      SizedBox(width: 4),
-                      Text('Add'),
-                    ],
-                  ),
                 ),
               ],
             ),
           ],
         );
       },
-    );
-  }
+    ),
+  );
+}
 
-  Widget _buildBulkActionsBar(FluentThemeData theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: theme.accentColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: theme.accentColor.withValues(alpha: 0.3),
-        ),
-      ),
+  Widget _buildBulkActionsBar() {
+    return DesignSystemComponents.standardCard(
+      padding: const EdgeInsets.all(DesignTokens.space4),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 500;
@@ -426,53 +450,49 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(
-                      FluentIcons.multi_select,
-                      color: theme.accentColor,
-                      size: 16,
+                    Container(
+                      padding: const EdgeInsets.all(DesignTokens.space1),
+                      decoration: BoxDecoration(
+                        color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.1),
+                        borderRadius: BorderRadius.circular(DesignTokens.radiusSmall),
+                      ),
+                      child: Icon(
+                        FluentIcons.multi_select,
+                        color: DesignTokens.accentPrimary,
+                        size: DesignTokens.iconSizeSmall,
+                      ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: DesignTokens.space2),
                     Expanded(
                       child: Text(
                         '${_selectedClientIds.length} selected',
-                        style: TextStyle(
-                          color: theme.accentColor,
-                          fontWeight: FontWeight.w600,
+                        style: DesignTextStyles.body.copyWith(
+                          color: DesignTokens.accentPrimary,
+                          fontWeight: DesignTokens.fontWeightSemiBold,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: DesignTokens.space3),
                 Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                  spacing: DesignTokens.space2,
+                  runSpacing: DesignTokens.space2,
                   children: [
-                    Button(
+                    DesignSystemComponents.secondaryButton(
+                      text: 'Tag',
+                      icon: FluentIcons.tag,
                       onPressed: () => _showBulkTagDialog(),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(FluentIcons.tag, size: 14),
-                          SizedBox(width: 4),
-                          Text('Tag'),
-                        ],
-                      ),
                     ),
-                    Button(
+                    DesignSystemComponents.dangerButton(
+                      text: 'Delete',
+                      icon: FluentIcons.delete,
                       onPressed: () => _showBulkDeleteDialog(),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(FluentIcons.delete, size: 14),
-                          SizedBox(width: 4),
-                          Text('Delete'),
-                        ],
-                      ),
+                      requireConfirmation: false, // We'll handle confirmation ourselves
                     ),
-                    Button(
+                    DesignSystemComponents.secondaryButton(
+                      text: 'Clear',
                       onPressed: _clearSelection,
-                      child: const Text('Clear'),
                     ),
                   ],
                 ),
@@ -482,48 +502,44 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
           
           return Row(
             children: [
-              Icon(
-                FluentIcons.multi_select,
-                color: theme.accentColor,
-                size: 16,
+              Container(
+                padding: const EdgeInsets.all(DesignTokens.space1),
+                decoration: BoxDecoration(
+                  color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.1),
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusSmall),
+                ),
+                child: Icon(
+                  FluentIcons.multi_select,
+                  color: DesignTokens.accentPrimary,
+                  size: DesignTokens.iconSizeSmall,
+                ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: DesignTokens.space2),
               Text(
                 '${_selectedClientIds.length} clients selected',
-                style: TextStyle(
-                  color: theme.accentColor,
-                  fontWeight: FontWeight.w600,
+                style: DesignTextStyles.body.copyWith(
+                  color: DesignTokens.accentPrimary,
+                  fontWeight: DesignTokens.fontWeightSemiBold,
                 ),
               ),
               const Spacer(),
               Wrap(
-                spacing: 8,
+                spacing: DesignTokens.space2,
                 children: [
-                  Button(
+                  DesignSystemComponents.secondaryButton(
+                    text: 'Tag',
+                    icon: FluentIcons.tag,
                     onPressed: () => _showBulkTagDialog(),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(FluentIcons.tag, size: 14),
-                        SizedBox(width: 4),
-                        Text('Tag'),
-                      ],
-                    ),
                   ),
-                  Button(
+                  DesignSystemComponents.dangerButton(
+                    text: 'Delete',
+                    icon: FluentIcons.delete,
                     onPressed: () => _showBulkDeleteDialog(),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(FluentIcons.delete, size: 14),
-                        SizedBox(width: 4),
-                        Text('Delete'),
-                      ],
-                    ),
+                    requireConfirmation: false, // We'll handle confirmation ourselves
                   ),
-                  Button(
+                  DesignSystemComponents.secondaryButton(
+                    text: 'Clear',
                     onPressed: _clearSelection,
-                    child: const Text('Clear'),
                   ),
                 ],
               ),
@@ -534,78 +550,27 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
     );
   }
 
-  Widget _buildEmptyState(FluentThemeData theme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            FluentIcons.people,
-            size: 64,
-            color: theme.resources.textFillColorSecondary,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _hasActiveFilters() ? 'No clients match your filters' : 'No clients found',
-            style: theme.typography.subtitle?.copyWith(
-              color: theme.resources.textFillColorSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _hasActiveFilters() 
-                ? 'Try adjusting your search criteria'
-                : 'Add your first client to get started',
-            style: theme.typography.body?.copyWith(
-              color: theme.resources.textFillColorTertiary,
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (_hasActiveFilters())
-            Button(
-              onPressed: _clearFilters,
-              child: const Text('Clear Filters'),
-            )
-          else
-            FilledButton(
-              onPressed: () => context.go('/clients/add'),
-              child: const Text('Add Client'),
-            ),
-        ],
-      ),
+  Widget _buildEmptyState() {
+    return DesignSystemComponents.emptyState(
+      title: _hasActiveFilters() ? 'No clients match your filters' : 'No clients found',
+      message: _hasActiveFilters() 
+          ? 'Try adjusting your search criteria'
+          : 'Add your first client to get started',
+      icon: FluentIcons.people,
+      iconColor: DesignTokens.textTertiary,
+      actionText: _hasActiveFilters() ? 'Clear Filters' : 'Add Client',
+      onAction: _hasActiveFilters() ? _clearFilters : () => context.go('/clients/add'),
     );
   }
 
-  Widget _buildErrorState(FluentThemeData theme, String error) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            FluentIcons.error,
-            size: 64,
-            color: Colors.red,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Error loading clients',
-            style: theme.typography.subtitle,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            error,
-            style: theme.typography.body?.copyWith(
-              color: theme.resources.textFillColorSecondary,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          Button(
-            onPressed: () => setState(() {}),
-            child: const Text('Retry'),
-          ),
-        ],
-      ),
+  Widget _buildErrorState(String error) {
+    return DesignSystemComponents.emptyState(
+      title: 'Error loading clients',
+      message: error,
+      icon: FluentIcons.error,
+      iconColor: DesignTokens.semanticError,
+      actionText: 'Retry',
+      onAction: () => setState(() {}),
     );
   }
 
@@ -617,7 +582,6 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
   }
 
   void _showBulkTagDialog() {
-    // TODO: Implement bulk tag dialog
     displayInfoBar(
       context,
       builder: (context, close) => InfoBar(
@@ -636,12 +600,12 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
         title: const Text('Delete Clients'),
         content: Text('Are you sure you want to delete ${_selectedClientIds.length} clients? This action cannot be undone.'),
         actions: [
-          Button(
-            child: const Text('Cancel'),
+          DesignSystemComponents.secondaryButton(
+            text: 'Cancel',
             onPressed: () => Navigator.of(context).pop(),
           ),
-          FilledButton(
-            child: const Text('Delete'),
+          DesignSystemComponents.dangerButton(
+            text: 'Delete',
             onPressed: () async {
               Navigator.of(context).pop();
               await _performBulkDelete();
@@ -659,6 +623,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       
       setState(() {
         _selectedClientIds.clear();
+        _listKey = UniqueKey(); // Force rebuild after deletion
       });
       
       if (mounted) {

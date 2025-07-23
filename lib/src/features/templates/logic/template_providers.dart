@@ -88,8 +88,8 @@ class TemplateOperationsNotifier extends StateNotifier<AsyncValue<void>> {
       final createdTemplate = await _dao.createTemplate(template);
       state = const AsyncValue.data(null);
       
-      // Refresh all template providers
-      _refreshProviders();
+      // Refresh all template providers immediately
+      _refreshAllProviders();
       
       return createdTemplate;
     } catch (error, stackTrace) {
@@ -106,8 +106,9 @@ class TemplateOperationsNotifier extends StateNotifier<AsyncValue<void>> {
       state = const AsyncValue.data(null);
       
       // Refresh providers
-      _refreshProviders();
+      _refreshAllProviders();
       _ref.invalidate(templateProvider(template.id));
+      _ref.invalidate(templateByIdProvider(template.id));
       
       return updatedTemplate;
     } catch (error, stackTrace) {
@@ -124,8 +125,9 @@ class TemplateOperationsNotifier extends StateNotifier<AsyncValue<void>> {
       state = const AsyncValue.data(null);
       
       // Refresh providers
-      _refreshProviders();
+      _refreshAllProviders();
       _ref.invalidate(templateProvider(id));
+      _ref.invalidate(templateByIdProvider(id));
       
       return result;
     } catch (error, stackTrace) {
@@ -142,7 +144,7 @@ class TemplateOperationsNotifier extends StateNotifier<AsyncValue<void>> {
       state = const AsyncValue.data(null);
       
       // Refresh providers
-      _refreshProviders();
+      _refreshAllProviders();
       
       return duplicatedTemplate;
     } catch (error, stackTrace) {
@@ -159,9 +161,10 @@ class TemplateOperationsNotifier extends StateNotifier<AsyncValue<void>> {
       state = const AsyncValue.data(null);
       
       // Refresh providers
-      _refreshProviders();
+      _refreshAllProviders();
       for (final id in ids) {
         _ref.invalidate(templateProvider(id));
+        _ref.invalidate(templateByIdProvider(id));
       }
     } catch (error, stackTrace) {
       state = AsyncValue.error(error, stackTrace);
@@ -174,18 +177,24 @@ class TemplateOperationsNotifier extends StateNotifier<AsyncValue<void>> {
     return await _dao.templateNameExists(name, excludeId: excludeId);
   }
 
-  // Refresh all template-related providers
-  void _refreshProviders() {
+  // Comprehensive refresh of all template-related providers
+  void _refreshAllProviders() {
     _ref.invalidate(templatesProvider);
     _ref.invalidate(emailTemplatesProvider);
     _ref.invalidate(whatsappTemplatesProvider);
     _ref.invalidate(recentTemplatesProvider);
     _ref.invalidate(templateCountProvider);
     _ref.invalidate(templatesWithStatsProvider);
+    
+    // Also invalidate type-specific providers
+    _ref.invalidate(templatesByTypeProvider(TemplateType.email));
+    _ref.invalidate(templatesByTypeProvider(TemplateType.whatsapp));
+    _ref.invalidate(templateCountByTypeProvider(TemplateType.email));
+    _ref.invalidate(templateCountByTypeProvider(TemplateType.whatsapp));
   }
 }
 
-// Template operations provider
+// Update the provider
 final templateOperationsProvider = StateNotifierProvider<TemplateOperationsNotifier, AsyncValue<void>>((ref) {
   final dao = ref.read(templateDaoProvider);
   return TemplateOperationsNotifier(dao, ref);

@@ -271,10 +271,10 @@ class IsolateSendingService {
       // Fallback to legacy rendering for templates without blocks
       personalizedMessage = _personalizeMessage(template.body, client);
     }
-
+    logger.i(client.phone);
     // WhatsApp API call (example using a generic WhatsApp Business API)
     final response = await _dio.post(
-      whatsappSettings.apiUrl,
+      '${whatsappSettings.apiUrl}/v22.0/${whatsappSettings.phoneNumberId}/messages',
       options: Options(
         headers: {
           'Authorization': 'Bearer ${whatsappSettings.apiKey}',
@@ -289,7 +289,9 @@ class IsolateSendingService {
           'body': personalizedMessage,
         },
       },
-    );
+    ).then((value) {
+      logger.i('URL: ${_dio.options.baseUrl}${_dio.options.queryParameters}');
+    });
 
     if (response.statusCode != 200) {
       throw Exception('WhatsApp API error: ${response.statusMessage}');
@@ -384,6 +386,7 @@ class IsolateSendingService {
     return WhatsAppSettings(
       apiUrl: await _storage.read(key: 'whatsapp_api_url') ?? '',
       apiKey: await _storage.read(key: 'whatsapp_api_key') ?? '',
+      phoneNumberId: await _storage.read(key: 'whatsapp_phone_number_id') ?? '',
     );
   }
 }
@@ -410,9 +413,11 @@ class SmtpSettings {
 class WhatsAppSettings {
   final String apiUrl;
   final String apiKey;
+  final String phoneNumberId;
 
   WhatsAppSettings({
     required this.apiUrl,
     required this.apiKey,
+    required this.phoneNumberId,
   });
 }

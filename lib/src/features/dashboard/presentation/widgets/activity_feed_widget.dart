@@ -1,4 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import '../../../../core/design_system/design_tokens.dart';
+import '../../../../core/design_system/component_library.dart';
 
 class ActivityFeedWidget extends StatelessWidget {
   final List<ActivityItem> activities;
@@ -10,72 +12,70 @@ class ActivityFeedWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Flexible(
-              child: Text(
-                'Recent Activity',
-                style: theme.typography.bodyStrong?.copyWith(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Button(
-              style: ButtonStyle(
-                padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
-              ),
-              onPressed: () {},
-              child: Text(
-                'View All',
-                style: theme.typography.caption?.copyWith(
-                  color: theme.accentColor,
-                ),
-              ),
-            ),
-          ],
-        ),
-        
-        const SizedBox(height: 16),
-        
-        Expanded(
-          child: activities.isEmpty 
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      FluentIcons.timeline,
-                      size: 48,
-                      color: theme.resources.textFillColorTertiary,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No recent activity',
-                      style: theme.typography.body?.copyWith(
-                        color: theme.resources.textFillColorSecondary,
+    return DesignSystemComponents.standardCard(
+      padding: EdgeInsets.all(DesignTokens.space4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(DesignTokens.space2),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          DesignTokens.accentPrimary.withValues(alpha: 0.15),
+                          DesignTokens.accentPrimary.withValues(alpha: 0.08),
+                        ],
                       ),
+                      borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
                     ),
-                  ],
-                ),
-              )
-            : ListView.separated(
-                itemCount: activities.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final activity = activities[index];
-                  return _ActivityTile(activity: activity);
-                },
+                    child: Icon(
+                      FluentIcons.timeline,
+                      size: DesignTokens.iconSizeMedium,
+                      color: DesignTokens.accentPrimary,
+                    ),
+                  ),
+                  SizedBox(width: DesignTokens.space3),
+                  Text(
+                    'Recent Activity',
+                    style: DesignTextStyles.subtitle.copyWith(
+                      fontWeight: DesignTokens.fontWeightSemiBold,
+                    ),
+                  ),
+                ],
               ),
-        ),
-      ],
+              DesignSystemComponents.secondaryButton(
+                text: 'View All',
+                onPressed: () {},
+              ),
+            ],
+          ),
+          
+          SizedBox(height: DesignTokens.space4),
+          
+          Expanded(
+            child: activities.isEmpty 
+              ? DesignSystemComponents.emptyState(
+                  title: 'No recent activity',
+                  message: 'Activity will appear here as it happens',
+                  icon: FluentIcons.timeline,
+                  iconColor: DesignTokens.textTertiary,
+                )
+              : ListView.separated(
+                  itemCount: activities.length,
+                  separatorBuilder: (context, index) => SizedBox(height: DesignTokens.space3),
+                  itemBuilder: (context, index) {
+                    final activity = activities[index];
+                    return _ActivityTile(activity: activity);
+                  },
+                ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -87,34 +87,30 @@ class _ActivityTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = FluentTheme.of(context);
-    
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.resources.cardBackgroundFillColorSecondary,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: theme.resources.dividerStrokeColorDefault.withValues(alpha: 0.3),
-        ),
-      ),
+    return DesignSystemComponents.standardCard(
+      padding: EdgeInsets.all(DesignTokens.space3),
       child: Row(
         children: [
           Container(
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: activity.iconColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                colors: [
+                  activity.iconColor.withValues(alpha: 0.15),
+                  activity.iconColor.withValues(alpha: 0.08),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(DesignTokens.radiusRound),
             ),
             child: Icon(
               activity.icon,
-              size: 16,
+              size: DesignTokens.iconSizeSmall,
               color: activity.iconColor,
             ),
           ),
           
-          const SizedBox(width: 12),
+          SizedBox(width: DesignTokens.space3),
           
           Expanded(
             child: Column(
@@ -122,17 +118,17 @@ class _ActivityTile extends StatelessWidget {
               children: [
                 Text(
                   activity.title,
-                  style: theme.typography.body?.copyWith(
-                    fontWeight: FontWeight.w500,
+                  style: DesignTextStyles.body.copyWith(
+                    fontWeight: DesignTokens.fontWeightMedium,
                   ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: DesignTokens.space1),
                 Text(
                   activity.subtitle,
-                  style: theme.typography.caption?.copyWith(
-                    color: theme.resources.textFillColorSecondary,
+                  style: DesignTextStyles.caption.copyWith(
+                    color: DesignTokens.textSecondary,
                   ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 2,
@@ -141,12 +137,12 @@ class _ActivityTile extends StatelessWidget {
             ),
           ),
           
-          const SizedBox(width: 8),
+          SizedBox(width: DesignTokens.space2),
           
           Text(
             activity.timeAgo,
-            style: theme.typography.caption?.copyWith(
-              color: theme.resources.textFillColorTertiary,
+            style: DesignTextStyles.caption.copyWith(
+              color: DesignTokens.textTertiary,
             ),
           ),
         ],
