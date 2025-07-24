@@ -9,9 +9,9 @@ import '../data/template_model.dart';
 final templateDaoProvider = Provider<TemplateDao>((ref) => TemplateDao());
 
 // All templates provider
-final templatesProvider = FutureProvider<List<TemplateModel>>((ref) async {
+final templatesProvider = StreamProvider<List<TemplateModel>>((ref) {
   final dao = ref.read(templateDaoProvider);
-  return await dao.getAllTemplates();
+  return dao.watchAllTemplates();
 });
 
 final templateByIdProvider = FutureProvider.family<TemplateModel?, int>((ref, id) {
@@ -20,21 +20,21 @@ final templateByIdProvider = FutureProvider.family<TemplateModel?, int>((ref, id
 });
 
 // Templates by type provider
-final templatesByTypeProvider = FutureProvider.family<List<TemplateModel>, TemplateType>((ref, type) async {
+final templatesByTypeProvider = StreamProvider.family<List<TemplateModel>, TemplateType>((ref, type) {
   final dao = ref.read(templateDaoProvider);
-  return await dao.watchTemplatesByType(type);
+  return dao.watchTemplatesByType(type);
 });
 
 // Email templates provider
-final emailTemplatesProvider = FutureProvider<List<TemplateModel>>((ref) async {
+final emailTemplatesProvider = StreamProvider<List<TemplateModel>>((ref) {
   final dao = ref.read(templateDaoProvider);
-  return await dao.watchTemplatesByType(TemplateType.email);
+  return dao.watchTemplatesByType(TemplateType.email);
 });
 
 // WhatsApp templates provider
-final whatsappTemplatesProvider = FutureProvider<List<TemplateModel>>((ref) async {
+final whatsappTemplatesProvider = StreamProvider<List<TemplateModel>>((ref) {
   final dao = ref.read(templateDaoProvider);
-  return await dao.watchTemplatesByType(TemplateType.whatsapp);
+  return dao.watchTemplatesByType(TemplateType.whatsapp);
 });
 
 // Single template provider

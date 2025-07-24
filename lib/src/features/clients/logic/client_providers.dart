@@ -28,9 +28,9 @@ final searchClientsProvider = StreamProvider.family<List<ClientModel>, String>((
   return dao.searchClients(searchTerm);
 });
 
-final paginatedClientsProvider = Provider.family<Future<PaginatedResult<ClientModel>>, PaginatedClientsParams>((ref, params) {
+final paginatedClientsProvider = StreamProvider.family<PaginatedResult<ClientModel>, PaginatedClientsParams>((ref, params) {
   final dao = ref.watch(clientDaoProvider);
-  return dao.getPaginatedClients(
+  return dao.watchPaginatedClients(
     page: params.page,
     limit: params.limit,
     searchTerm: params.searchTerm,

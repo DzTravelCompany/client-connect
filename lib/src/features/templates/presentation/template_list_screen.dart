@@ -1,3 +1,4 @@
+import 'package:client_connect/src/features/templates/data/template_dao.dart';
 import 'package:client_connect/src/features/templates/data/template_model.dart';
 import 'package:client_connect/src/features/templates/logic/template_providers.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -17,22 +18,10 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
   String _searchQuery = '';
   String _selectedFilter = 'all';
   bool _isRefreshing = false;
-  Key _templateListKey = UniqueKey();
 
   @override
   Widget build(BuildContext context) {
     final templatesAsync = ref.watch(templatesProvider);
-
-    // Listen to template operations to refresh list
-    ref.listen<AsyncValue<void>>(templateOperationsProvider, (previous, next) {
-      next.whenOrNull(
-        data: (_) {
-          setState(() {
-            _templateListKey = UniqueKey(); // Force rebuild after operations
-          });
-        },
-      );
-    });
 
     return Container(
       decoration: BoxDecoration(
@@ -240,7 +229,6 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: DesignTokens.space6),
       child: GridView.builder(
-        key: _templateListKey,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           crossAxisSpacing: DesignTokens.space4,
@@ -250,16 +238,7 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
         itemCount: filteredTemplates.length,
         itemBuilder: (context, index) {
           final template = filteredTemplates[index];
-          return TemplateCard(
-            key: ValueKey(template.id), // Add key for individual cards
-            template: template,
-            onTemplateChanged: () {
-              // Callback to refresh list when template is modified
-              setState(() {
-                _templateListKey = UniqueKey();
-              });
-            },
-          );
+          return TemplateCard(template: template);
         },
       ),
     );
@@ -335,10 +314,6 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
     try {
       ref.invalidate(templatesProvider);
       await Future.delayed(const Duration(milliseconds: 500));
-
-      setState(() {
-        _templateListKey = UniqueKey(); // Force rebuild after refresh
-      });
       
       if (mounted) {
         displayInfoBar(
@@ -375,9 +350,8 @@ class _TemplateListScreenState extends ConsumerState<TemplateListScreen> {
 
 class TemplateCard extends ConsumerWidget {
   final TemplateModel template;
-  final VoidCallback? onTemplateChanged;
 
-  const TemplateCard({super.key, required this.template, this.onTemplateChanged,});
+  const TemplateCard({super.key, required this.template});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -545,8 +519,9 @@ class TemplateCard extends ConsumerWidget {
 
   void _duplicateTemplate(BuildContext context, WidgetRef ref, TemplateModel template) async {
     try {
-      await ref.read(templateOperationsProvider.notifier).duplicateTemplate(template.id);
-      onTemplateChanged?.call();
+      final dao = TemplateDao();
+      await dao.duplicateTemplate(template.id);
+      ref.invalidate(templatesProvider);
       if (context.mounted) {
         displayInfoBar(
           context,
@@ -624,8 +599,9 @@ class TemplateCard extends ConsumerWidget {
             onPressed: () async {
               Navigator.of(context).pop();
               try {
-                await ref.read(templateOperationsProvider.notifier).deleteTemplate(template.id);
-                onTemplateChanged?.call();
+                final dao = TemplateDao();
+                await dao.deleteTemplate(template.id);
+                ref.invalidate(templatesProvider);
                 if (context.mounted) {
                   displayInfoBar(
                     context,

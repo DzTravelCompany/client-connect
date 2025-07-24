@@ -9,18 +9,21 @@ class TemplateDao {
   final AppDatabase _database = DatabaseService.instance.database;
 
   // Get all templates
-  Future<List<TemplateModel>> getAllTemplates() async {
-    final templates = await _database.select(_database.templates).get();
-    return templates.map((template) => TemplateModel.fromDatabase(template)).toList();
+  Stream<List<TemplateModel>> watchAllTemplates() {
+    return _database.select(_database.templates).watch().map((templates) {
+      return templates.map((template) => TemplateModel.fromDatabase(template)).toList();
+    });
   }
 
   // Get templates by type
-  Future<List<TemplateModel>> watchTemplatesByType(TemplateType type) async {
+  Stream<List<TemplateModel>> watchTemplatesByType(TemplateType type) {
     final typeString = type == TemplateType.whatsapp ? 'whatsapp' : 'email';
-    final templates = await (_database.select(_database.templates)
+    return (_database.select(_database.templates)
           ..where((t) => t.templateType.equals(typeString)))
-        .get();
-    return templates.map((template) => TemplateModel.fromDatabase(template)).toList();
+        .watch()
+        .map((templates) {
+      return templates.map((template) => TemplateModel.fromDatabase(template)).toList();
+    });
   }
 
   // Get template by ID
@@ -205,23 +208,23 @@ class TemplateDao {
 
   // Get templates with block statistics
   Future<List<Map<String, dynamic>>> getTemplatesWithStats() async {
-    final templates = await getAllTemplates();
+    final templates = await watchAllTemplates();
     
-    return templates.map((template) {
+    return templates.expand((template) => template.map((t) {
       final blockTypeCounts = <String, int>{};
-      for (final block in template.blocks) {
+      t.blocks.forEach((block) {
         final typeName = block.type.name;
         blockTypeCounts[typeName] = (blockTypeCounts[typeName] ?? 0) + 1;
-      }
+      });
       
       return {
-        'template': template,
-        'block_count': template.blocks.length,
+        'template': t,
+        'block_count': t.blocks.length,
         'block_types': blockTypeCounts,
         // 'has_placeholders': template.blocks.any((b) => b.type == TemplateBlockType.placeholder),
-        'has_images': template.blocks.any((b) => b.type == TemplateBlockType.image),
-        'has_buttons': template.blocks.any((b) => b.type == TemplateBlockType.button),
+        'has_images': t.blocks.any((b) => b.type == TemplateBlockType.image),
+        'has_buttons': t.blocks.any((b) => b.type == TemplateBlockType.button),
       };
-    }).toList();
+    })).toList();
   }
 }

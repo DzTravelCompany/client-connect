@@ -30,9 +30,6 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
   String? _selectedCompany;
   DateTimeRange? _dateRange;
 
-  // Add a key to force rebuild when data changes
-  Key _listKey = UniqueKey();
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -46,7 +43,6 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       if (mounted) {
         setState(() {
           _searchTerm = value.trim();
-          _listKey = UniqueKey(); // Force rebuild
         });
       }
     });
@@ -61,7 +57,6 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       if (tags != null) _selectedTags = tags;
       if (company != null) _selectedCompany = company;
       if (dateRange != null) _dateRange = dateRange;
-      _listKey = UniqueKey(); // Force rebuild
     });
   }
 
@@ -72,7 +67,6 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       _selectedCompany = null;
       _dateRange = null;
       _searchController.clear();
-      _listKey = UniqueKey(); // Force rebuild
     });
   }
 
@@ -99,7 +93,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
     });
   }
 
-  Future<PaginatedResult<ClientModel>> _loadClients(int page, int limit) async {
+  Stream<PaginatedResult<ClientModel>> _loadClients(int page, int limit) {
     final params = PaginatedClientsParams(
       page: page,
       limit: limit,
@@ -111,7 +105,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       sortAscending: _sortAscending,
     );
     
-    return await ref.read(paginatedClientsProvider(params));
+    return ref.watch(paginatedClientsProvider(params).stream);
   }
 
   @override
@@ -121,8 +115,9 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
     // Listen to client form state to refresh list when clients are saved
     ref.listen<ClientFormState>(clientFormProvider, (previous, next) {
       if (previous?.isSaved != next.isSaved && next.isSaved) {
+        // The list will rebuild automatically, just need to clear selection
         setState(() {
-          _listKey = UniqueKey(); // Force rebuild when client is saved
+          _selectedClientIds.clear();
         });
       }
     });
@@ -130,9 +125,9 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
     // Listen to bulk operations to refresh list
     ref.listen<ClientBulkOperationsState>(clientBulkOperationsProvider, (previous, next) {
       if (previous?.successMessage != next.successMessage && next.successMessage != null) {
+        // The list will rebuild automatically, just need to clear selection
         setState(() {
-          _listKey = UniqueKey(); // Force rebuild after bulk operations
-          _selectedClientIds.clear(); // Clear selection
+          _selectedClientIds.clear();
         });
       }
     });
@@ -189,7 +184,6 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                         Expanded(
                           child: LayoutBuilder(
                             builder: (context, constraints) => PaginatedListView<ClientModel>(
-                              key: _listKey, // Use the key to force rebuilds
                               loadData: _loadClients,
                               pageSize: 20,
                               searchQuery: _searchTerm,
@@ -623,7 +617,6 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       
       setState(() {
         _selectedClientIds.clear();
-        _listKey = UniqueKey(); // Force rebuild after deletion
       });
       
       if (mounted) {

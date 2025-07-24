@@ -1,7 +1,9 @@
+import 'dart:async';
+
 import 'package:fluent_ui/fluent_ui.dart';
 
 class PaginatedListView<T> extends StatefulWidget {
-  final Future<PaginatedResult<T>> Function(int page, int limit) loadData;
+  final Stream<PaginatedResult<T>> Function(int page, int limit) loadData;
   final Widget Function(T item, int index) itemBuilder;
   final Widget Function()? emptyBuilder;
   final Widget Function(String error)? errorBuilder;
@@ -26,6 +28,7 @@ class PaginatedListView<T> extends StatefulWidget {
 
 class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
   final ScrollController _scrollController = ScrollController();
+  StreamSubscription<PaginatedResult<T>>? _subscription;
   final List<T> _items = [];
   bool _isLoading = false;
   bool _hasMore = true;
@@ -51,6 +54,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _subscription?.cancel();
     super.dispose();
   }
 
@@ -61,61 +65,68 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
     }
   }
 
-  Future<void> _loadInitialData() async {
+  void _loadInitialData() {
     if (_isLoading) return;
-    
+
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
-    try {
-      final result = await widget.loadData(1, widget.pageSize);
-      if (mounted) {
-        setState(() {
-          _items.clear();
-          _items.addAll(result.items);
-          _hasMore = result.hasMore;
-          _currentPage = 1;
-          _lastSearchQuery = widget.searchQuery;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
-    }
+    _subscription?.cancel();
+    _subscription = widget.loadData(1, widget.pageSize).listen(
+      (result) {
+        if (mounted) {
+          setState(() {
+            _items.clear();
+            _items.addAll(result.items);
+            _hasMore = result.hasMore;
+            _currentPage = 1;
+            _lastSearchQuery = widget.searchQuery;
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (e) {
+        if (mounted) {
+          setState(() {
+            _error = e.toString();
+            _isLoading = false;
+          });
+        }
+      },
+    );
   }
 
-  Future<void> _loadMoreData() async {
+  void _loadMoreData() {
     if (_isLoading || !_hasMore) return;
 
     setState(() {
       _isLoading = true;
     });
 
-    try {
-      final result = await widget.loadData(_currentPage + 1, widget.pageSize);
-      if (mounted) {
-        setState(() {
-          _items.addAll(result.items);
-          _hasMore = result.hasMore;
-          _currentPage++;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
-    }
+    _subscription?.cancel();
+    _subscription =
+        widget.loadData(_currentPage + 1, widget.pageSize).listen(
+      (result) {
+        if (mounted) {
+          setState(() {
+            _items.addAll(result.items);
+            _hasMore = result.hasMore;
+            _currentPage++;
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (e) {
+        if (mounted) {
+          setState(() {
+            _error = e.toString();
+            _isLoading = false;
+          });
+        }
+      },
+    );
   }
 
   void _resetAndReload() {

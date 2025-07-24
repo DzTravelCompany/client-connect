@@ -21,7 +21,6 @@ class CampaignDashboardScreen extends ConsumerStatefulWidget {
 
 class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScreen> {
   bool _showBulkActions = false;
-  Key _campaignListKey = UniqueKey();
 
   @override
   Widget build(BuildContext context) {
@@ -31,24 +30,6 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
         final progressAsync = ref.watch(campaignProgressProvider);
         final filterState = ref.watch(campaignFilterStateProvider);
         final detailPanelState = ref.watch(campaignDetailPanelProvider);
-        
-        // Listen to campaign creation state to refresh list
-        ref.listen<CampaignCreationState>(campaignCreationProvider, (previous, next) {
-          if (previous?.isCreated != next.isCreated && next.isCreated) {
-            setState(() {
-              _campaignListKey = UniqueKey(); // Force rebuild when campaign is created
-            });
-          }
-        });
-
-        // Listen to campaign actions to refresh list
-        ref.listen<CampaignActionsState>(campaignActionsProvider, (previous, next) {
-          if (previous?.successMessage != next.successMessage && next.successMessage != null) {
-            setState(() {
-              _campaignListKey = UniqueKey(); // Force rebuild after actions
-            });
-          }
-        });
         
         return Container(
           color: DesignTokens.surfacePrimary,
@@ -196,7 +177,6 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
                 }
 
                 return GridView.builder(
-                  key: _campaignListKey, // Use key to force rebuilds
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     childAspectRatio: 1.5,
@@ -588,12 +568,6 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
       final controller = ref.read(campaignControlProvider);
       await controller.startCampaign(campaignId);
       
-      // Force refresh of campaign list
-      ref.invalidate(allCampaignsProvider);
-      setState(() {
-        _campaignListKey = UniqueKey();
-      });
-      
       if (mounted) {
         displayInfoBar(
           context,
@@ -624,12 +598,6 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
     try {
       final controller = ref.read(campaignControlProvider);
       await controller.stopCampaign(campaignId);
-      
-      // Force refresh of campaign list
-      ref.invalidate(allCampaignsProvider);
-      setState(() {
-        _campaignListKey = UniqueKey();
-      });
       
       if (mounted) {
         displayInfoBar(
