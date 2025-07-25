@@ -2,14 +2,19 @@ import 'package:client_connect/src/core/design_system/component_library.dart';
 import 'package:client_connect/src/core/design_system/design_tokens.dart';
 import 'package:client_connect/src/features/clients/data/client_activity_model.dart';
 import 'package:client_connect/src/features/clients/logic/client_activity_providers.dart';
+import 'package:client_connect/src/features/campaigns/data/campaigns_model.dart';
+import 'package:client_connect/src/features/campaigns/logic/campaign_providers.dart';
+import 'package:client_connect/src/features/templates/data/template_model.dart';
+import 'package:client_connect/src/features/templates/logic/template_providers.dart';
 import 'package:client_connect/src/features/tags/data/tag_model.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show LinearProgressIndicator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../logic/client_providers.dart';
 import '../../data/client_model.dart';
 import '../../../tags/logic/tag_providers.dart';
 import 'client_activity_timeline.dart';
-
 
 class ClientDetailsPanel extends ConsumerStatefulWidget {
   final int clientId;
@@ -246,18 +251,24 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
                       ),
                       SizedBox(height: DesignTokens.space6),
 
-                      // Recent Campaigns
+                      // Recent Campaigns - Enhanced with real data
                       _buildSection(
                         'Recent Campaigns',
                         clientCampaignsAsync.when(
                           data: (campaigns) => _buildCampaignsSection(campaigns),
                           loading: () => DesignSystemComponents.skeletonLoader(height: 120),
-                          error: (_, __) => DesignSystemComponents.emptyState(
-                            title: 'Error loading campaigns',
-                            message: 'Could not load client campaigns',
-                            icon: FluentIcons.error,
-                            iconColor: DesignTokens.semanticError,
-                          ),
+                          error: (error, stackTrace) => _buildCampaignsErrorState(error),
+                        ),
+                      ),
+                      SizedBox(height: DesignTokens.space6),
+
+                      // Campaign Statistics
+                      _buildSection(
+                        'Campaign Statistics',
+                        clientCampaignsAsync.when(
+                          data: (campaigns) => _buildCampaignStatistics(campaigns),
+                          loading: () => DesignSystemComponents.skeletonLoader(height: 80),
+                          error: (_, __) => const SizedBox.shrink(),
                         ),
                       ),
                       SizedBox(height: DesignTokens.space6),
@@ -521,45 +532,108 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
     );
   }
 
-  Widget _buildCampaignsSection(List<dynamic> campaigns) {
+  Widget _buildCampaignsSection(List<CampaignModel> campaigns) {
     if (campaigns.isEmpty) {
       return DesignSystemComponents.emptyState(
         title: 'No campaigns yet',
         message: 'This client has not been included in any campaigns',
         icon: FluentIcons.send,
+        actionText: 'Create Campaign',
+        onAction: () => _navigateToCreateCampaign(),
       );
     }
+
+    // Sort campaigns by creation date (most recent first)
+    final sortedCampaigns = List<CampaignModel>.from(campaigns)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     return DesignSystemComponents.standardCard(
       padding: EdgeInsets.all(DesignTokens.space4),
       child: Column(
-        children: campaigns.take(5).map((campaign) => Container(
-          padding: EdgeInsets.all(DesignTokens.space3),
-          margin: EdgeInsets.only(bottom: DesignTokens.space2),
-          decoration: BoxDecoration(
-            color: DesignTokens.surfaceSecondary,
-            borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
-            border: Border.all(
-              color: DesignTokens.neutralGray200,
-            ),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with campaign count
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${campaigns.length} Campaign${campaigns.length != 1 ? 's' : ''}',
+                style: DesignTextStyles.bodyLarge.copyWith(
+                  fontWeight: DesignTokens.fontWeightSemiBold,
+                ),
+              ),
+              if (campaigns.length > 5)
+                Button(
+                  onPressed: () => _showAllCampaigns(campaigns),
+                  child: Text(
+                    'View All',
+                    style: DesignTextStyles.caption.copyWith(
+                      color: DesignTokens.accentPrimary,
+                    ),
+                  ),
+                ),
+            ],
           ),
-          child: Row(
+          SizedBox(height: DesignTokens.space3),
+          
+          // Campaign list (show up to 5 most recent)
+          ...sortedCampaigns.take(5).map((campaign) => _buildCampaignCard(campaign)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCampaignCard(CampaignModel campaign) {
+    return Container(
+      margin: EdgeInsets.only(bottom: DesignTokens.space3),
+      child: Consumer(
+        builder: (context, ref, child) {
+          // Get template information
+          final templateAsync = ref.watch(templateByIdProvider(campaign.templateId));
+          
+          return templateAsync.when(
+            data: (template) => _buildCampaignCardContent(campaign, template),
+            loading: () => _buildCampaignCardSkeleton(),
+            error: (_, __) => _buildCampaignCardContent(campaign, null),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCampaignCardContent(CampaignModel campaign, TemplateModel? template) {
+    return Container(
+      padding: EdgeInsets.all(DesignTokens.space4),
+      decoration: BoxDecoration(
+        color: DesignTokens.surfaceSecondary,
+        borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+        border: Border.all(
+          color: DesignTokens.neutralGray200,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
             children: [
               Container(
                 padding: EdgeInsets.all(DesignTokens.space2),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      DesignTokens.accentPrimary.withValues(alpha: 0.15),
-                      DesignTokens.accentPrimary.withValues(alpha: 0.08),
-                    ],
-                  ),
+                  color: campaign.statusColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
                 ),
                 child: Icon(
-                  FluentIcons.send,
+                  campaign.statusIcon,
                   size: DesignTokens.iconSizeSmall,
-                  color: DesignTokens.accentPrimary,
+                  color: campaign.statusColor,
                 ),
               ),
               SizedBox(width: DesignTokens.space3),
@@ -568,26 +642,293 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Campaign Name', // TODO: Use actual campaign name
-                      style: DesignTextStyles.bodyLarge,
-                    ),
-                    SizedBox(height: DesignTokens.space1),
-                    Text(
-                      'Sent 2 days ago', // TODO: Use actual date
-                      style: DesignTextStyles.caption.copyWith(
-                        color: DesignTokens.textSecondary,
+                      campaign.name,
+                      style: DesignTextStyles.bodyLarge.copyWith(
+                        fontWeight: DesignTokens.fontWeightSemiBold,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                    if (template != null) ...[
+                      SizedBox(height: DesignTokens.space1),
+                      Text(
+                        'Template: ${template.name}',
+                        style: DesignTextStyles.caption.copyWith(
+                          color: DesignTokens.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ],
                 ),
               ),
               DesignSystemComponents.statusBadge(
-                text: 'Sent',
-                type: SemanticColorType.success,
+                text: campaign.statusDisplayName,
+                type: _getSemanticColorType(campaign.status),
               ),
             ],
           ),
-        )).toList(),
+          
+          SizedBox(height: DesignTokens.space3),
+          
+          // Campaign details
+          Row(
+            children: [
+              Expanded(
+                child: _buildCampaignDetail(
+                  FluentIcons.calendar,
+                  'Created',
+                  _formatDate(campaign.createdAt),
+                ),
+              ),
+              if (campaign.scheduledAt != null)
+                Expanded(
+                  child: _buildCampaignDetail(
+                    FluentIcons.clock,
+                    'Scheduled',
+                    _formatDate(campaign.scheduledAt!),
+                  ),
+                ),
+              if (campaign.completedAt != null)
+                Expanded(
+                  child: _buildCampaignDetail(
+                    FluentIcons.completed,
+                    'Completed',
+                    _formatDate(campaign.completedAt!),
+                  ),
+                ),
+            ],
+          ),
+          
+          // Progress indicator for in-progress campaigns
+          if (campaign.isInProgress) ...[
+            SizedBox(height: DesignTokens.space3),
+            Consumer(
+              builder: (context, ref, child) {
+                final statisticsAsync = ref.watch(campaignStatisticsProvider(campaign.id));
+                return statisticsAsync.when(
+                  data: (statistics) => _buildProgressIndicator(statistics),
+                  loading: () => DesignSystemComponents.skeletonLoader(height: 20),
+                  error: (_, __) => const SizedBox.shrink(),
+                );
+              },
+            ),
+          ],
+          
+          // Action buttons
+          SizedBox(height: DesignTokens.space3),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Button(
+                onPressed: () => _viewCampaignDetails(campaign.id),
+                child: Text(
+                  'View Details',
+                  style: DesignTextStyles.caption.copyWith(
+                    color: DesignTokens.accentPrimary,
+                  ),
+                ),
+              ),
+              if (campaign.isPending || campaign.isPaused) ...[
+                SizedBox(width: DesignTokens.space2),
+                Button(
+                  onPressed: () => _startCampaign(campaign.id),
+                  child: Text(
+                    campaign.isPaused ? 'Resume' : 'Start',
+                    style: DesignTextStyles.caption.copyWith(
+                      color: DesignTokens.semanticSuccess,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCampaignCardSkeleton() {
+    return Container(
+      padding: EdgeInsets.all(DesignTokens.space4),
+      margin: EdgeInsets.only(bottom: DesignTokens.space3),
+      decoration: BoxDecoration(
+        color: DesignTokens.surfaceSecondary,
+        borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+        border: Border.all(color: DesignTokens.neutralGray200),
+      ),
+      child: Column(
+        children: [
+          DesignSystemComponents.skeletonLoader(height: 20),
+          SizedBox(height: DesignTokens.space2),
+          DesignSystemComponents.skeletonLoader(height: 16),
+          SizedBox(height: DesignTokens.space2),
+          DesignSystemComponents.skeletonLoader(height: 14),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCampaignDetail(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: DesignTokens.iconSizeSmall,
+          color: DesignTokens.textSecondary,
+        ),
+        SizedBox(width: DesignTokens.space2),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: DesignTextStyles.caption.copyWith(
+                  color: DesignTokens.textSecondary,
+                ),
+              ),
+              Text(
+                value,
+                style: DesignTextStyles.caption.copyWith(
+                  fontWeight: DesignTokens.fontWeightSemiBold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProgressIndicator(dynamic statistics) {
+    final progress = statistics.totalMessages > 0 
+        ? statistics.sentMessages / statistics.totalMessages 
+        : 0.0;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Progress',
+              style: DesignTextStyles.caption.copyWith(
+                color: DesignTokens.textSecondary,
+              ),
+            ),
+            Text(
+              '${statistics.sentMessages}/${statistics.totalMessages}',
+              style: DesignTextStyles.caption.copyWith(
+                fontWeight: DesignTokens.fontWeightSemiBold,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: DesignTokens.space1),
+        LinearProgressIndicator(
+          value: progress,
+          backgroundColor: DesignTokens.neutralGray200,
+          valueColor: AlwaysStoppedAnimation<Color>(DesignTokens.accentPrimary),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCampaignStatistics(List<CampaignModel> campaigns) {
+    if (campaigns.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final totalCampaigns = campaigns.length;
+    final completedCampaigns = campaigns.where((c) => c.isCompleted).length;
+    final inProgressCampaigns = campaigns.where((c) => c.isInProgress).length;
+    final failedCampaigns = campaigns.where((c) => c.isFailed).length;
+
+    return DesignSystemComponents.standardCard(
+      padding: EdgeInsets.all(DesignTokens.space4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Campaign Overview',
+            style: DesignTextStyles.bodyLarge.copyWith(
+              fontWeight: DesignTokens.fontWeightSemiBold,
+            ),
+          ),
+          SizedBox(height: DesignTokens.space3),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatisticItem(
+                  'Total',
+                  totalCampaigns.toString(),
+                  DesignTokens.accentPrimary,
+                ),
+              ),
+              Expanded(
+                child: _buildStatisticItem(
+                  'Completed',
+                  completedCampaigns.toString(),
+                  DesignTokens.semanticSuccess,
+                ),
+              ),
+              Expanded(
+                child: _buildStatisticItem(
+                  'In Progress',
+                  inProgressCampaigns.toString(),
+                  DesignTokens.semanticWarning,
+                ),
+              ),
+              Expanded(
+                child: _buildStatisticItem(
+                  'Failed',
+                  failedCampaigns.toString(),
+                  DesignTokens.semanticError,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatisticItem(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: DesignTextStyles.titleLarge.copyWith(
+            color: color,
+            fontWeight: DesignTokens.fontWeightBold,
+          ),
+        ),
+        SizedBox(height: DesignTokens.space1),
+        Text(
+          label,
+          style: DesignTextStyles.caption.copyWith(
+            color: DesignTokens.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCampaignsErrorState(Object error) {
+    return DesignSystemComponents.standardCard(
+      padding: EdgeInsets.all(DesignTokens.space4),
+      child: DesignSystemComponents.emptyState(
+        title: 'Error loading campaigns',
+        message: 'Could not load campaigns for this client. Please try again.',
+        icon: FluentIcons.error,
+        iconColor: DesignTokens.semanticError,
+        actionText: 'Retry',
+        onAction: () => ref.invalidate(clientCampaignsProvider(widget.clientId)),
       ),
     );
   }
@@ -622,6 +963,7 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
     );
   }
 
+  // Helper methods
   String _getInitials(String name) {
     final parts = name.trim().split(' ');
     if (parts.length >= 2) {
@@ -630,6 +972,106 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
       return parts.first[0].toUpperCase();
     }
     return '?';
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays == 0) {
+      return 'Today ${DateFormat.Hm().format(date)}';
+    } else if (difference.inDays == 1) {
+      return 'Yesterday';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
+    } else {
+      return DateFormat.yMMMd().format(date);
+    }
+  }
+
+  SemanticColorType _getSemanticColorType(String status) {
+    switch (status) {
+      case 'completed':
+        return SemanticColorType.success;
+      case 'failed':
+      case 'cancelled':
+        return SemanticColorType.error;
+      case 'in_progress':
+      case 'queued':
+        return SemanticColorType.info;
+      case 'paused':
+        return SemanticColorType.warning;
+      default:
+        return SemanticColorType.info;
+    }
+  }
+
+  // Navigation and action methods
+  void _navigateToCreateCampaign() {
+    // TODO
+    // Navigate to campaign creation with this client pre-selected
+    // This would be implemented based on your navigation system
+  }
+
+  void _showAllCampaigns(List<CampaignModel> campaigns) {
+    // Show a dialog or navigate to a screen showing all campaigns for this client
+    showDialog(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: const Text('All Campaigns'),
+        content: SizedBox(
+          width: 600,
+          height: 400,
+          child: ListView.builder(
+            itemCount: campaigns.length,
+            itemBuilder: (context, index) => _buildCampaignCard(campaigns[index]),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _viewCampaignDetails(int campaignId) {
+    // TODO
+    // Navigate to campaign details screen
+    // This would be implemented based on your navigation system
+  }
+
+  void _startCampaign(int campaignId) async {
+    try {
+      final campaignActions = ref.read(campaignActionsProvider.notifier);
+      await campaignActions.startCampaign(campaignId);
+      
+      if (mounted) {
+        displayInfoBar(
+          context,
+          builder: (context, close) => InfoBar(
+            title: const Text('Campaign Started'),
+            content: const Text('The campaign has been started successfully.'),
+            severity: InfoBarSeverity.success,
+            onClose: close,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        displayInfoBar(
+          context,
+          builder: (context, close) => InfoBar(
+            title: const Text('Error'),
+            content: Text('Failed to start campaign: $e'),
+            severity: InfoBarSeverity.error,
+            onClose: close,
+          ),
+        );
+      }
+    }
   }
 
   void _startEdit() {
