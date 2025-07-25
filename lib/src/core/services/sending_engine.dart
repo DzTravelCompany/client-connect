@@ -10,8 +10,8 @@ import 'package:client_connect/src/core/services/retry_service.dart';
 
 class SendingEngine {
   static SendingEngine? _instance;
-  static SendingEngine get instance => _instance ??= SendingEngine._();
-  SendingEngine._() {
+  static SendingEngine get instance => _instance ??= SendingEngine.internal();
+  SendingEngine.internal() {
     _initScheduledCampaignsChecker();
   }
 
@@ -65,11 +65,11 @@ class SendingEngine {
           
           // Check if campaign is complete
           if (progress.isComplete) {
-            _handleCampaignComplete(campaignId, progress);
+            handleCampaignComplete(campaignId, progress);
           }
         },
         onError: (error) {
-          _handleCampaignError(campaignId, error);
+          handleCampaignError(campaignId, error);
         },
       );
 
@@ -105,7 +105,7 @@ class SendingEngine {
     }
   }
 
-  void _handleCampaignComplete(int campaignId, CampaignProgress progress) async {
+  void handleCampaignComplete(int campaignId, CampaignProgress progress) async {
     final campaignDao = CampaignDao();
     await campaignDao.updateCampaignStatus(
       campaignId, 
@@ -117,7 +117,7 @@ class SendingEngine {
     debugPrint('Campaign $campaignId completed successfully');
   }
 
-  void _handleCampaignError(int campaignId, dynamic error) async {
+  void handleCampaignError(int campaignId, dynamic error) async {
     final campaignDao = CampaignDao();
     await campaignDao.updateCampaignStatus(campaignId, 'failed');
     

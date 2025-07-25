@@ -1,3 +1,4 @@
+import 'package:client_connect/src/core/realtime/realtime_dashboard_service.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import '../../../../core/design_system/design_tokens.dart';
 import '../../../../core/design_system/component_library.dart';
@@ -151,18 +152,18 @@ class _ActivityTile extends StatelessWidget {
   }
 }
 
-class ActivityItem {
-  final String title;
-  final String subtitle;
-  final String timeAgo;
-  final IconData icon;
-  final Color iconColor;
+// class ActivityItem {
+//   final String title;
+//   final String subtitle;
+//   final String timeAgo;
+//   final IconData icon;
+//   final Color iconColor;
 
-  ActivityItem({
-    required this.title,
-    required this.subtitle,
-    required this.timeAgo,
-    required this.icon,
-    required this.iconColor,
-  });
-}
+//   ActivityItem({
+//     required this.title,
+//     required this.subtitle,
+//     required this.timeAgo,
+//     required this.icon,
+//     required this.iconColor,
+//   });
+// }

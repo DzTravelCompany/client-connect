@@ -83,6 +83,12 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
     final clientTagsAsync = ref.watch(clientTagsProvider(widget.clientId));
     final clientCampaignsAsync = ref.watch(clientCampaignsProvider(widget.clientId));
 
+    ref.listen(clientByIdProvider(widget.clientId), (previous, next) {
+      if (next.hasValue && next.value != null) {
+        _populateControllers(next.value!);
+      }
+    });
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(

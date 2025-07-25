@@ -11,14 +11,18 @@ import '../data/client_dao.dart';
 import '../data/client_model.dart';
 import 'package:drift/drift.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import '../../../core/realtime/reactive_providers.dart';
+import '../../../core/realtime/event_bus.dart';
 
 
 // Client DAO provider
 final clientDaoProvider = Provider<ClientDao>((ref) => ClientDao());
 
-// All clients stream provider
+// Real-time client provider without circular event emission
 final allClientsProvider = StreamProvider<List<ClientModel>>((ref) {
   final dao = ref.watch(clientDaoProvider);
+  
+  // Just return the stream without emitting events that cause circular dependencies
   return dao.watchAllClients();
 });
 
@@ -43,9 +47,9 @@ final paginatedClientsProvider = StreamProvider.family<PaginatedResult<ClientMod
 });
 
 // Client by ID provider
-final clientByIdProvider = FutureProvider.family<ClientModel?, int>((ref, id) {
+final clientByIdProvider = StreamProvider.family<ClientModel?, int>((ref, id) {
   final dao = ref.watch(clientDaoProvider);
-  return dao.getClientById(id);
+  return dao.watchClientById(id);
 });
 
 // Client form state provider
@@ -100,20 +104,32 @@ class ClientFormState {
   }
 }
 
-// Client form notifier
-class ClientFormNotifier extends StateNotifier<ClientFormState> {
+// Enhanced client form notifier with real-time events
+class ClientFormNotifier extends StateNotifier<ClientFormState> with RealtimeProviderMixin<ClientFormState> {
   final ClientDao _dao;
   final Ref _ref;
 
-  ClientFormNotifier(this._dao, this._ref) : super(const ClientFormState());
+  ClientFormNotifier(this._dao, this._ref) : super(const ClientFormState()) {
+    initializeEventListeners();
+  }
+  
+  void initializeEventListeners() {
+    // Listen to client events from other sources
+    listenToEvents<ClientEvent>((event) {
+      if (event.type == ClientEventType.updated || event.type == ClientEventType.created) {
+        // Refresh relevant data
+        _ref.invalidate(allClientsProvider);
+        _ref.invalidate(clientCompaniesProvider);
+      }
+    });
+  }
 
   Future<void> saveClient(ClientModel client) async {
     state = state.copyWith(isLoading: true, error: null);
     
     try {
       if (client.id == 0) {
-        // New client
-        await _dao.insertClient(ClientsCompanion.insert(
+        final newId = await _dao.insertClient(ClientsCompanion.insert(
           firstName: client.firstName,
           lastName: client.lastName,
           email: Value(client.email),
@@ -123,8 +139,16 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> {
           address: Value(client.address),
           notes: Value(client.notes),
         ));
+        
+        // Emit real-time event after successful creation
+        emitEvent(ClientEvent(
+          type: ClientEventType.created,
+          clientId: newId,
+          timestamp: DateTime.now(),
+          source: 'ClientFormNotifier',
+          metadata: {'client_name': client.fullName},
+        ));
       } else {
-        // Update existing client
         await _dao.updateClient(client.id, ClientsCompanion(
           firstName: Value(client.firstName),
           lastName: Value(client.lastName),
@@ -135,18 +159,19 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> {
           address: Value(client.address),
           notes: Value(client.notes),
         ));
-      }
-      
-      // Invalidate all client-related providers to force refresh
-      _ref.invalidate(allClientsProvider);
-      _ref.invalidate(clientCompaniesProvider);
-      if (client.id != 0) {
-        _ref.invalidate(clientByIdProvider(client.id));
+        
+        // Emit real-time event after successful update
+        emitEvent(ClientEvent(
+          type: ClientEventType.updated,
+          clientId: client.id,
+          timestamp: DateTime.now(),
+          source: 'ClientFormNotifier',
+          metadata: {'client_name': client.fullName},
+        ));
       }
       
       state = state.copyWith(isLoading: false, isSaved: true);
       
-      // Reset saved state after 3 seconds
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) {
           state = state.copyWith(isSaved: false);

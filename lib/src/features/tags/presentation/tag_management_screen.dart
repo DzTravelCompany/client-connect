@@ -6,6 +6,9 @@ import '../data/tag_model.dart';
 import 'widgets/tag_chip.dart';
 import 'widgets/tag_form_dialog.dart';
 import 'widgets/bulk_tag_operations_panel.dart';
+import '../../../core/realtime/realtime_sync_service.dart';
+import '../../../core/realtime/event_bus.dart';
+import 'dart:async';
 
 class TagManagementScreen extends ConsumerStatefulWidget {
   const TagManagementScreen({super.key});
@@ -18,10 +21,69 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchTerm = '';
   final List<int> _selectedTagFilter = [];
+  late StreamSubscription _eventSubscription;
+  final RealtimeSyncService _syncService = RealtimeSyncService();
+
+  @override
+  void initState() {
+    super.initState();
+    _setupRealtimeListeners();
+  }
+
+  void _setupRealtimeListeners() {
+    // Listen to real-time events and refresh providers when needed
+    _eventSubscription = _syncService.allEvents.listen((event) {
+      if (mounted) {
+        if (event is TagEvent) {
+          // Tag-specific events - immediate refresh
+          Future.microtask(() {
+            ref.invalidate(allTagsProvider);
+            ref.invalidate(tagUsageStatsProvider);
+            ref.invalidate(allClientsWithTagsProvider);
+            
+            if (event.tagId != null) {
+              ref.invalidate(tagByIdProvider(event.tagId!));
+            }
+            
+            if (_selectedTagFilter.isNotEmpty) {
+              ref.invalidate(clientsWithTagsProvider(_selectedTagFilter));
+            }
+          });
+        } else if (event is DatabaseEvent && 
+            (event.tableName == 'tags' || event.tableName == 'client_tags')) {
+          // Database-level changes
+          Future.microtask(() {
+            ref.invalidate(allTagsProvider);
+            ref.invalidate(allClientsWithTagsProvider);
+            ref.invalidate(tagUsageStatsProvider);
+            
+            if (_selectedTagFilter.isNotEmpty) {
+              ref.invalidate(clientsWithTagsProvider(_selectedTagFilter));
+            }
+          });
+        } else if (event is ClientEvent) {
+          // Client changes might affect tag assignments
+          Future.microtask(() {
+            ref.invalidate(allClientsWithTagsProvider);
+            if (_selectedTagFilter.isNotEmpty) {
+              ref.invalidate(clientsWithTagsProvider(_selectedTagFilter));
+            }
+            
+            // If specific client was updated, refresh its tags
+            if (event.clientId != null) {
+              ref.invalidate(tagsForClientProvider(event.clientId!));
+              ref.invalidate(clientTagsProvider(event.clientId!));
+            }
+          });
+        }
+      }
+    });
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _eventSubscription.cancel();
     super.dispose();
   }
 
@@ -48,6 +110,11 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
               icon: const Icon(FluentIcons.bulk_upload),
               label: const Text('Bulk Operations'),
               onPressed: () => _showBulkOperationsPanel(),
+            ),
+            CommandBarButton(
+              icon: const Icon(FluentIcons.refresh),
+              label: const Text('Refresh'),
+              onPressed: () => _refreshAllData(),
             ),
           ],
         ),
@@ -199,18 +266,45 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                               ).toList();
 
                         if (filteredClients.isEmpty) {
-                          return const Center(
-                            child: Text('No clients found matching your criteria.'),
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(FluentIcons.people, size: 48),
+                                const SizedBox(height: 16),
+                                Text(
+                                  _searchTerm.isEmpty && _selectedTagFilter.isEmpty
+                                      ? 'No clients found. Add some clients to get started.'
+                                      : 'No clients found matching your criteria.',
+                                  style: FluentTheme.of(context).typography.body,
+                                ),
+                                if (_searchTerm.isNotEmpty || _selectedTagFilter.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Button(
+                                    child: const Text('Clear Filters'),
+                                    onPressed: () {
+                                      setState(() {
+                                        _searchTerm = '';
+                                        _searchController.clear();
+                                        _selectedTagFilter.clear();
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ],
+                            ),
                           );
                         }
 
                         return ListView.builder(
+                          key: ValueKey('clients_${filteredClients.length}_${DateTime.now().millisecondsSinceEpoch ~/ 1000}'), // Force rebuild
                           itemCount: filteredClients.length,
                           itemBuilder: (context, index) {
                             final client = filteredClients[index];
                             final isSelected = tagManagementState.selectedClients.contains(client.id);
 
                             return Card(
+                              key: ValueKey('client_${client.id}_${client.tags.length}'), // Include tag count in key
                               backgroundColor: isSelected
                                   ? FluentTheme.of(context).accentColor.withValues(alpha: 0.1)
                                   : null,
@@ -233,6 +327,7 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                                         spacing: 4,
                                         runSpacing: 4,
                                         children: client.tags.map((tag) => TagChip(
+                                          key: ValueKey('tag_${tag.id}_${tag.name}_${tag.color}'), // Force rebuild on tag changes
                                           tag: tag,
                                           size: TagChipSize.small,
                                           onRemove: () => _removeTagFromClient(client.id, tag.id),
@@ -259,9 +354,30 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                           },
                         );
                       },
-                      loading: () => const Center(child: ProgressRing()),
+                      loading: () => const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ProgressRing(),
+                            SizedBox(height: 16),
+                            Text('Loading clients...'),
+                          ],
+                        ),
+                      ),
                       error: (error, stack) => Center(
-                        child: Text('Error: $error'),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(FluentIcons.error, size: 48, color: Colors.red),
+                            const SizedBox(height: 16),
+                            Text('Error loading clients: $error'),
+                            const SizedBox(height: 8),
+                            Button(
+                              child: const Text('Retry'),
+                              onPressed: () => _refreshAllData(),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -292,7 +408,17 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                                 ),
                                 loading: () => const Center(child: ProgressRing()),
                                 error: (error, stack) => Center(
-                                  child: Text('Error: $error'),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text('Error: $error'),
+                                      const SizedBox(height: 8),
+                                      Button(
+                                        child: const Text('Retry'),
+                                        onPressed: () => _refreshAllData(),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -323,6 +449,7 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
             ...tags.map((tag) {
               final isSelected = _selectedTagFilter.contains(tag.id);
               return TagChip(
+                key: ValueKey('filter_tag_${tag.id}_${tag.name}_${tag.color}'), // Force rebuild on tag changes
                 tag: tag,
                 isSelected: isSelected,
                 onTap: () {
@@ -360,6 +487,7 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
     }
 
     return ListView.builder(
+      key: ValueKey('tags_${tags.length}_${DateTime.now().millisecondsSinceEpoch ~/ 1000}'), // Force rebuild
       itemCount: tags.length,
       itemBuilder: (context, index) {
         final tag = tags[index];
@@ -367,6 +495,7 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
         final isSelected = ref.watch(tagManagementProvider).selectedTags.contains(tag.id);
 
         return Card(
+          key: ValueKey('tag_card_${tag.id}_${tag.name}_${tag.color}_${tag.updatedAt}'), // Include updated timestamp
           backgroundColor: isSelected
               ? FluentTheme.of(context).accentColor.withValues(alpha: 0.1)
               : null,
@@ -417,11 +546,24 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
     );
   }
 
+  void _refreshAllData() {
+    ref.invalidate(allTagsProvider);
+    ref.invalidate(allClientsWithTagsProvider);
+    ref.invalidate(tagUsageStatsProvider);
+    
+    if (_selectedTagFilter.isNotEmpty) {
+      ref.invalidate(clientsWithTagsProvider(_selectedTagFilter));
+    }
+  }
+
   void _showTagDialog([TagModel? tag]) {
     showDialog(
       context: context,
       builder: (context) => TagFormDialog(tag: tag),
-    );
+    ).then((_) {
+      // Force refresh after dialog closes
+      _refreshAllData();
+    });
   }
 
   void _showBulkOperationsPanel() {
@@ -438,7 +580,10 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
         clientId: clientId,
         clientName: clientName,
       ),
-    );
+    ).then((_) {
+      // Force refresh after dialog closes
+      _refreshAllData();
+    });
   }
 
   void _showDeleteTagDialog(TagModel tag) {
@@ -458,6 +603,10 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
               Navigator.of(context).pop();
               try {
                 await ref.read(tagDaoProvider).deleteTag(tag.id);
+                
+                // Force immediate refresh
+                _refreshAllData();
+                
                 if (context.mounted) {
                   displayInfoBar(
                     context,
@@ -492,6 +641,10 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
   Future<void> _removeTagFromClient(int clientId, int tagId) async {
     try {
       await ref.read(tagDaoProvider).removeTagFromClient(clientId, tagId);
+      
+      // Force immediate refresh
+      _refreshAllData();
+      
       if (mounted) {
         displayInfoBar(
           context,
@@ -712,6 +865,15 @@ class _ClientTagDialogState extends ConsumerState<ClientTagDialog> {
           await dao.addTagToClient(widget.clientId, tagId);
         }
       }
+
+      // Force immediate refresh of relevant providers
+      Future.microtask(() {
+        ref.invalidate(tagsForClientProvider(widget.clientId));
+        ref.invalidate(clientTagsProvider(widget.clientId));
+        ref.invalidate(allClientsWithTagsProvider);
+        ref.invalidate(tagUsageStatsProvider);
+        ref.invalidate(allTagsProvider);
+      });
 
       if (mounted) {
         displayInfoBar(

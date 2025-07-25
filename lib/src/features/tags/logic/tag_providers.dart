@@ -1,15 +1,18 @@
 import 'package:client_connect/src/core/models/database.dart';
 import 'package:client_connect/src/features/clients/logic/client_providers.dart';
+import 'package:client_connect/src/features/dashboard/logic/dashboard_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart';
 import '../data/tag_dao.dart';
 import '../data/tag_model.dart';
+import '../../../core/realtime/reactive_providers.dart';
+import '../../../core/realtime/event_bus.dart';
 
 
 // Tag DAO provider
 final tagDaoProvider = Provider<TagDao>((ref) => TagDao());
 
-// All tags stream provider
+// Real-time tag providers without circular dependencies
 final allTagsProvider = StreamProvider<List<TagModel>>((ref) {
   final dao = ref.watch(tagDaoProvider);
   return dao.watchAllTags();
@@ -22,9 +25,9 @@ final searchTagsProvider = StreamProvider.family<List<TagModel>, String>((ref, s
 });
 
 // Tag by ID provider
-final tagByIdProvider = FutureProvider.family<TagModel?, int>((ref, id) {
+final tagByIdProvider = StreamProvider.family<TagModel?, int>((ref, id) {
   final dao = ref.watch(tagDaoProvider);
-  return dao.getTagById(id);
+  return dao.watchTagById(id);
 });
 
 // Tags for client provider
@@ -152,12 +155,16 @@ class TagFormNotifier extends StateNotifier<TagFormState> {
         ));
       }
       
-      // Invalidate all tag-related providers
-      _ref.invalidate(allTagsProvider);
-      _ref.invalidate(tagUsageStatsProvider);
-      if (tag.id != 0) {
-        _ref.invalidate(tagByIdProvider(tag.id));
-      }
+      // Force immediate provider refresh
+      Future.microtask(() {
+        _ref.invalidate(allTagsProvider);
+        _ref.invalidate(tagUsageStatsProvider);
+        _ref.invalidate(allClientsWithTagsProvider);
+        
+        if (tag.id != 0) {
+          _ref.invalidate(tagByIdProvider(tag.id));
+        }
+      });
       
       state = state.copyWith(isLoading: false, isSaved: true);
       
@@ -177,12 +184,49 @@ class TagFormNotifier extends StateNotifier<TagFormState> {
   }
 }
 
-// Tag management notifier
-class TagManagementNotifier extends StateNotifier<TagManagementState> {
+// Enhanced tag management notifier with real-time events
+class TagManagementNotifier extends StateNotifier<TagManagementState> with RealtimeProviderMixin<TagManagementState> {
   final TagDao _dao;
   final Ref _ref;
 
-  TagManagementNotifier(this._dao, this._ref) : super(const TagManagementState());
+  TagManagementNotifier(this._dao, this._ref) : super(const TagManagementState()) {
+    initializeEventListeners();
+  }
+
+  void initializeEventListeners() {
+    // Listen to tag-specific events
+    listenToEvents<TagEvent>((event) {
+      _handleTagEvent(event);
+    });
+    
+    // Listen to database events
+    listenToEvents<DatabaseEvent>((event) {
+      if (event.tableName == 'tags' || event.tableName == 'client_tags') {
+        _invalidateTagRelatedProviders();
+      }
+    });
+  }
+
+  void _handleTagEvent(TagEvent event) {
+    switch (event.type) {
+      case TagEventType.created:
+      case TagEventType.updated:
+      case TagEventType.deleted:
+        // Force immediate refresh of all tag-related providers
+        Future.microtask(() {
+          _invalidateTagRelatedProviders();
+        });
+        break;
+      case TagEventType.assigned:
+      case TagEventType.unassigned:
+        // Handle tag assignment changes
+        Future.microtask(() {
+          _ref.invalidate(allClientsWithTagsProvider);
+          _ref.invalidate(tagUsageStatsProvider);
+        });
+        break;
+    }
+  }
 
   void selectClient(int clientId) {
     final selected = List<int>.from(state.selectedClients);
@@ -222,12 +266,30 @@ class TagManagementNotifier extends StateNotifier<TagManagementState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
+      // Perform the database operations
       for (final tagId in state.selectedTags) {
         await _dao.addTagToMultipleClients(state.selectedClients, tagId);
       }
 
-      // Invalidate all relevant providers
-      _invalidateTagRelatedProviders();
+      // Emit real-time events for each affected client
+      for (final clientId in state.selectedClients) {
+        emitEvent(ClientEvent(
+          type: ClientEventType.updated,
+          clientId: clientId,
+          timestamp: DateTime.now(),
+          source: 'TagManagementNotifier',
+          metadata: {
+            'action': 'tags_added', 
+            'tag_count': state.selectedTags.length,
+            'tag_ids': state.selectedTags,
+          },
+        ));
+      }
+
+      // Force immediate provider refresh
+      Future.microtask(() {
+        _invalidateTagRelatedProviders();
+      });
 
       state = state.copyWith(
         isLoading: false,
@@ -236,7 +298,6 @@ class TagManagementNotifier extends StateNotifier<TagManagementState> {
         selectedTags: [],
       );
 
-      // Clear success message after 3 seconds
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) {
           state = state.copyWith(successMessage: null);
@@ -294,9 +355,13 @@ class TagManagementNotifier extends StateNotifier<TagManagementState> {
     }
     
     // Invalidate clients with tags provider for affected tags
-    for (final tagId in state.selectedTags) {
-      _ref.invalidate(clientsWithTagsProvider([tagId]));
+    if (state.selectedTags.isNotEmpty) {
+      _ref.invalidate(clientsWithTagsProvider(state.selectedTags));
+      _ref.invalidate(clientsWithTagsProvider(null)); // Refresh all clients view
     }
+    
+    // Also invalidate dashboard metrics as they might depend on tag data
+    _ref.invalidate(dashboardMetricsProvider);
   }
 
   void clearMessages() {

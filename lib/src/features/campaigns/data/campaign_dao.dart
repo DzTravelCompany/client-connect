@@ -1,12 +1,16 @@
 import 'package:client_connect/src/core/services/retry_service.dart';
 import 'package:client_connect/src/features/campaigns/data/campaigns_model.dart' hide RetryLogModel;
 import 'package:drift/drift.dart';
+import 'package:rxdart/rxdart.dart';
 import '../../../../constants.dart';
 import '../../../core/models/database.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/realtime/realtime_sync_service.dart';
+import '../../../core/realtime/event_bus.dart';
 
 class CampaignDao {
   final AppDatabase _db = DatabaseService.instance.database;
+  final RealtimeSyncService _syncService = RealtimeSyncService();
 
   // Watch all campaigns
   Stream<List<CampaignModel>> watchAllCampaigns() {
@@ -30,7 +34,26 @@ class CampaignDao {
     return _campaignFromRow(row, clientIds);
   }
 
-  // Insert new campaign and create message logs with retry configuration
+  // Watch campaign by ID with client IDs
+  Stream<CampaignModel?> watchCampaignById(int id) {
+    final campaignStream = (_db.select(_db.campaigns)..where((c) => c.id.equals(id))).watchSingleOrNull();
+
+    return campaignStream.switchMap((campaignRow) {
+      if (campaignRow == null) {
+        return Stream.value(null);
+      }
+
+      final messageQuery = _db.select(_db.messageLogs)
+        ..where((m) => m.campaignId.equals(id));
+      
+      return messageQuery.watch().map((messages) {
+        final clientIds = messages.map((m) => m.clientId).toSet().toList();
+        return _campaignFromRow(campaignRow, clientIds);
+      });
+    });
+  }
+
+  // Insert new campaign and create message logs with retry configuration - ENHANCED WITH EVENT EMISSION
   Future<int> createCampaign({
     required String name,
     required int templateId,
@@ -67,6 +90,22 @@ class CampaignDao {
         ));
       }
 
+      // Emit real-time event
+      _syncService.emitEvent(CampaignEvent(
+        campaignId: campaignId,
+        type: CampaignEventType.created,
+        timestamp: DateTime.now(),
+        source: 'CampaignDao.createCampaign',
+        metadata: {
+          'name': name,
+          'templateId': templateId,
+          'clientCount': clientIds.length,
+          'messageType': messageType,
+          'status': initialStatus,
+          'scheduledAt': scheduledAt?.toIso8601String(),
+        },
+      ));
+
       return campaignId;
     });
   }
@@ -74,18 +113,69 @@ class CampaignDao {
   Future<bool> updateCampaignNmae(int id, String name) async {
     final query = _db.update(_db.campaigns)..where((c) => c.id.equals(id));
     final updatedRows = await query.write(CampaignsCompanion(
-      status: Value(name),
+      name: Value(name),
     ));
+    
+    if (updatedRows > 0) {
+      // Emit real-time event
+      _syncService.emitEvent(CampaignEvent(
+        campaignId: id,
+        type: CampaignEventType.updated,
+        timestamp: DateTime.now(),
+        source: 'CampaignDao.updateCampaignName',
+        metadata: {
+          'newName': name,
+        },
+      ));
+    }
+    
     return updatedRows > 0;
   }
 
-  // Update campaign status
+  // Update campaign status - ENHANCED WITH EVENT EMISSION
   Future<bool> updateCampaignStatus(int id, String status, {DateTime? completedAt}) async {
     final query = _db.update(_db.campaigns)..where((c) => c.id.equals(id));
     final updatedRows = await query.write(CampaignsCompanion(
       status: Value(status),
       completedAt: Value(completedAt),
     ));
+    
+    if (updatedRows > 0) {
+      // Determine event type based on status
+      CampaignEventType eventType;
+      switch (status.toLowerCase()) {
+        case 'in_progress':
+          eventType = CampaignEventType.started;
+          break;
+        case 'paused':
+          eventType = CampaignEventType.paused;
+          break;
+        case 'completed':
+          eventType = CampaignEventType.completed;
+          break;
+        case 'failed':
+          eventType = CampaignEventType.failed;
+          break;
+        case 'cancelled':
+          eventType = CampaignEventType.cancelled;
+          break;
+        default:
+          eventType = CampaignEventType.updated;
+      }
+
+      // Emit real-time event
+      _syncService.emitEvent(CampaignEvent(
+        campaignId: id,
+        type: eventType,
+        timestamp: DateTime.now(),
+        source: 'CampaignDao.updateCampaignStatus',
+        metadata: {
+          'newStatus': status,
+          'completedAt': completedAt?.toIso8601String(),
+        },
+      ));
+    }
+    
     return updatedRows > 0;
   }
 
@@ -192,12 +282,16 @@ class CampaignDao {
     return rows.map((row) => _messageLogFromRow(row)).toList();
   }
 
-  // Update message log status with retry handling
+  // Update message log status with retry handling - ENHANCED WITH EVENT EMISSION
   Future<bool> updateMessageStatus(int messageId, String status, {
     String? errorMessage,
     bool shouldScheduleRetry = false,
   }) async {
     return await _db.transaction(() async {
+      // Get campaign ID for event emission
+      final messageQuery = _db.select(_db.messageLogs)..where((m) => m.id.equals(messageId));
+      final messageLog = await messageQuery.getSingleOrNull();
+      
       final updatedRows = await (_db.update(_db.messageLogs)
         ..where((m) => m.id.equals(messageId)))
         .write(MessageLogsCompanion(
@@ -205,6 +299,22 @@ class CampaignDao {
           errorMessage: Value(errorMessage),
           sentAt: Value(status == 'sent' ? DateTime.now() : null),
         ));
+
+      if (updatedRows > 0 && messageLog != null) {
+        // Emit real-time event
+        _syncService.emitEvent(CampaignEvent(
+          campaignId: messageLog.campaignId,
+          type: CampaignEventType.messageStatusChanged,
+          timestamp: DateTime.now(),
+          source: 'CampaignDao.updateMessageStatus',
+          metadata: {
+            'messageId': messageId,
+            'newStatus': status,
+            'errorMessage': errorMessage,
+            'clientId': messageLog.clientId,
+          },
+        ));
+      }
 
       // Schedule retry if needed and message failed
       if (shouldScheduleRetry && status == 'failed' && errorMessage != null) {
@@ -243,13 +353,26 @@ class CampaignDao {
       ..where((m) => m.campaignId.equals(campaignId) & 
                      (m.status.equals('failed') | m.status.equals('failed_max_retries')));
     
-    await query.write(const MessageLogsCompanion(
+    final updatedRows = await query.write(const MessageLogsCompanion(
       status: Value('pending'),
       errorMessage: Value(null),
       retryCount: Value(0),
       nextRetryAt: Value(null),
       lastRetryAt: Value(null),
     ));
+
+    if (updatedRows > 0) {
+      // Emit real-time event
+      _syncService.emitEvent(CampaignEvent(
+        campaignId: campaignId,
+        type: CampaignEventType.updated,
+        timestamp: DateTime.now(),
+        source: 'CampaignDao.resetFailedMessages',
+        metadata: {
+          'resetMessageCount': updatedRows,
+        },
+      ));
+    }
   }
 
   // Get campaign statistics including retry information

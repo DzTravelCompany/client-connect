@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/analytics_service.dart';
 import '../data/analytics_models.dart';
+import '../../../core/realtime/reactive_providers.dart';
+import '../../../core/realtime/event_bus.dart';
 
 // Analytics service provider
 final analyticsServiceProvider = Provider<AnalyticsService>((ref) => AnalyticsService.instance);
@@ -10,23 +12,33 @@ final analyticsDateRangeProvider = StateProvider<AnalyticsDateRange>((ref) {
   return AnalyticsDateRange.last30Days();
 });
 
-// Analytics summary provider
-final analyticsSummaryProvider = FutureProvider<AnalyticsSummary>((ref) {
-  final service = ref.watch(analyticsServiceProvider);
-  final dateRange = ref.watch(analyticsDateRangeProvider);
-  return service.getAnalyticsSummary(dateRange);
-});
+// Real-time analytics summary provider
+final analyticsSummaryProvider = ReactiveProvider<AnalyticsSummary>(
+  (ref) async {
+    final service = ref.watch(analyticsServiceProvider);
+    final dateRange = ref.watch(analyticsDateRangeProvider);
+    return service.getAnalyticsSummary(dateRange);
+  },
+  [ClientEvent, CampaignEvent, AnalyticsEvent],
+  debounceTime: const Duration(seconds: 2),
+).createProvider();
 
-// Dashboard stats providers
-final totalClientsProvider = FutureProvider<int>((ref) {
-  final service = ref.watch(analyticsServiceProvider);
-  return service.getTotalClientsCount();
-});
+// Real-time dashboard stats providers
+final totalClientsProvider = ReactiveProvider<int>(
+  (ref) async {
+    final service = ref.watch(analyticsServiceProvider);
+    return service.getTotalClientsCount();
+  },
+  [ClientEvent],
+).createProvider();
 
-final activeCampaignsProvider = FutureProvider<int>((ref) {
-  final service = ref.watch(analyticsServiceProvider);
-  return service.getActiveCampaignsCount();
-});
+final activeCampaignsProvider = ReactiveProvider<int>(
+  (ref) async {
+    final service = ref.watch(analyticsServiceProvider);
+    return service.getActiveCampaignsCount();
+  },
+  [CampaignEvent],
+).createProvider();
 
 final totalTemplatesProvider = FutureProvider<int>((ref) {
   final service = ref.watch(analyticsServiceProvider);

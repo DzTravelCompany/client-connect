@@ -6,10 +6,13 @@ import '../../../core/widgets/paginated_list_view.dart';
 import 'client_model.dart';
 import '../../../core/cache/cached_repository.dart';
 import '../../../core/cache/cache_manager.dart';
+import '../../../core/realtime/realtime_sync_service.dart';
+import '../../../core/realtime/event_bus.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
 class ClientDao extends CachedRepository {
   final AppDatabase _db = DatabaseService.instance.database;
+  final RealtimeSyncService _syncService = RealtimeSyncService();
 
   // Watch all clients (reactive stream) - kept for backward compatibility
   Stream<List<ClientModel>> watchAllClients() {
@@ -122,17 +125,37 @@ class ClientDao extends CachedRepository {
     );
   }
 
-  // Insert new client
+  // Watch client by ID
+  Stream<ClientModel?> watchClientById(int id) {
+    final query = _db.select(_db.clients)..where((c) => c.id.equals(id));
+    return query.watchSingleOrNull().map((row) => row != null ? _clientFromRow(row) : null);
+  }
+
+  // Insert new client - ENHANCED WITH EVENT EMISSION
   Future<int> insertClient(ClientsCompanion client) async {
     final result = await _db.into(_db.clients).insert(client);
   
+    // Emit real-time event
+    _syncService.emitEvent(ClientEvent(
+      type: ClientEventType.created,
+      clientId: result,
+      timestamp: DateTime.now(),
+      source: 'ClientDao.insertClient',
+      metadata: {
+        'firstName': client.firstName.value,
+        'lastName': client.lastName.value,
+        'email': client.email.value,
+      },
+    ));
+
     // Invalidate paginated cache entries
     invalidateCache(CacheKeys.clientPrefix);
+    invalidateCache(CacheKeys.clientCompanies);
   
     return result;
   }
 
-  // Update existing client
+  // Update existing client - ENHANCED WITH EVENT EMISSION
   Future<bool> updateClient(int id, ClientsCompanion client) async {
     final query = _db.update(_db.clients)..where((c) => c.id.equals(id));
     final updatedRows = await query.write(client.copyWith(
@@ -140,23 +163,54 @@ class ClientDao extends CachedRepository {
     ));
   
     if (updatedRows > 0) {
+      // Emit real-time event
+      _syncService.emitEvent(ClientEvent(
+        type: ClientEventType.updated,
+        clientId: id,
+        timestamp: DateTime.now(),
+        source: 'ClientDao.updateClient',
+        metadata: {
+          'updatedFields': _getUpdatedFields(client),
+        },
+      ));
+
       // Clear specific client cache and paginated results
       clearCacheEntry(CacheKeys.clientById(id));
       invalidateCache(CacheKeys.clientPrefix);
+      invalidateCache(CacheKeys.clientCompanies);
     }
   
     return updatedRows > 0;
   }
 
-  // Delete client
+  // Delete client - ENHANCED WITH EVENT EMISSION
   Future<bool> deleteClient(int id) async {
+    // Get client data before deletion for event metadata
+    final clientData = await getClientById(id);
+    
     final query = _db.delete(_db.clients)..where((c) => c.id.equals(id));
     final deletedRows = await query.go();
   
     if (deletedRows > 0) {
+      // Emit real-time event
+      _syncService.emitEvent(ClientEvent(
+        type: ClientEventType.deleted,
+        clientId: id,
+        timestamp: DateTime.now(),
+        source: 'ClientDao.deleteClient',
+        metadata: {
+          'deletedClient': clientData != null ? {
+            'firstName': clientData.firstName,
+            'lastName': clientData.lastName,
+            'email': clientData.email,
+          } : null,
+        },
+      ));
+
       // Clear specific client cache and paginated results
       clearCacheEntry(CacheKeys.clientById(id));
       invalidateCache(CacheKeys.clientPrefix);
+      invalidateCache(CacheKeys.clientCompanies);
     }
   
     return deletedRows > 0;
@@ -179,7 +233,6 @@ class ClientDao extends CachedRepository {
   Future<List<String>> getAllCompanies() async {
     final cacheKey = CacheKeys.clientCompanies;
     
-
     return await getCached(
       cacheKey,
       () async {
@@ -199,9 +252,12 @@ class ClientDao extends CachedRepository {
     );
   }
 
-  // Bulk delete clients
+  // Bulk delete clients - ENHANCED WITH EVENT EMISSION
   Future<int> bulkDeleteClients(List<int> clientIds) async {
     if (clientIds.isEmpty) return 0;
+    
+    // Get client data before deletion for event metadata
+    final clientsData = await getClientsByIds(clientIds);
     
     final query = _db.delete(_db.clients)
       ..where((c) => c.id.isIn(clientIds));
@@ -209,17 +265,35 @@ class ClientDao extends CachedRepository {
     final deletedRows = await query.go();
     
     if (deletedRows > 0) {
+      // Emit real-time event
+      _syncService.emitEvent(ClientEvent(
+        type: ClientEventType.bulkDeleted,
+        timestamp: DateTime.now(),
+        source: 'ClientDao.bulkDeleteClients',
+        metadata: {
+          'deletedCount': deletedRows,
+          'clientIds': clientIds,
+          'deletedClients': clientsData.map((c) => {
+            'id': c.id,
+            'firstName': c.firstName,
+            'lastName': c.lastName,
+            'email': c.email,
+          }).toList(),
+        },
+      ));
+
       // Clear cache for all affected clients
       for (final id in clientIds) {
         clearCacheEntry(CacheKeys.clientById(id));
       }
       invalidateCache(CacheKeys.clientPrefix);
+      invalidateCache(CacheKeys.clientCompanies);
     }
     
     return deletedRows;
   }
 
-  // Bulk update clients (for tagging, company changes, etc.)
+  // Bulk update clients - ENHANCED WITH EVENT EMISSION
   Future<int> bulkUpdateClients(
     List<int> clientIds,
     ClientsCompanion updates,
@@ -234,11 +308,24 @@ class ClientDao extends CachedRepository {
     ));
     
     if (updatedRows > 0) {
+      // Emit real-time event
+      _syncService.emitEvent(ClientEvent(
+        type: ClientEventType.bulkUpdated,
+        timestamp: DateTime.now(),
+        source: 'ClientDao.bulkUpdateClients',
+        metadata: {
+          'updatedCount': updatedRows,
+          'clientIds': clientIds,
+          'updatedFields': _getUpdatedFields(updates),
+        },
+      ));
+
       // Clear cache for all affected clients
       for (final id in clientIds) {
         clearCacheEntry(CacheKeys.clientById(id));
       }
       invalidateCache(CacheKeys.clientPrefix);
+      invalidateCache(CacheKeys.clientCompanies);
     }
     
     return updatedRows;
@@ -253,6 +340,22 @@ class ClientDao extends CachedRepository {
     
     final results = await query.get();
     return results.map((row) => _clientFromRow(row)).toList();
+  }
+
+  // Helper method to extract updated fields from ClientsCompanion
+  Map<String, dynamic> _getUpdatedFields(ClientsCompanion companion) {
+    final fields = <String, dynamic>{};
+    
+    if (companion.firstName.present) fields['firstName'] = companion.firstName.value;
+    if (companion.lastName.present) fields['lastName'] = companion.lastName.value;
+    if (companion.email.present) fields['email'] = companion.email.value;
+    if (companion.phone.present) fields['phone'] = companion.phone.value;
+    if (companion.company.present) fields['company'] = companion.company.value;
+    if (companion.jobTitle.present) fields['jobTitle'] = companion.jobTitle.value;
+    if (companion.address.present) fields['address'] = companion.address.value;
+    if (companion.notes.present) fields['notes'] = companion.notes.value;
+    
+    return fields;
   }
 
   // Helper method to convert database row to ClientModel

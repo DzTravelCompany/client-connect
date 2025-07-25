@@ -1,3 +1,4 @@
+import 'package:client_connect/src/features/dashboard/presentation/widgets/activity_feed_widget.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
@@ -6,7 +7,6 @@ import '../../../core/design_system/design_tokens.dart';
 import '../../../core/design_system/component_library.dart';
 import '../logic/dashboard_providers.dart';
 import 'widgets/metric_card.dart';
-import 'widgets/activity_feed_widget.dart';
 import 'widgets/quick_actions_widget.dart';
 
 class DashboardScreen extends ConsumerWidget {

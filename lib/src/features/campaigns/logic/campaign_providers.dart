@@ -1,3 +1,5 @@
+import 'package:client_connect/src/core/realtime/event_bus.dart';
+import 'package:client_connect/src/core/realtime/realtime_sync_service.dart';
 import 'package:client_connect/src/core/services/retry_service.dart';
 import 'package:client_connect/src/features/campaigns/data/campaigns_model.dart' hide RetryLogModel;
 import 'package:client_connect/src/features/clients/logic/client_providers.dart';
@@ -7,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../constants.dart';
 import '../data/campaign_dao.dart';
 import '../../../core/services/sending_engine.dart';
+import 'package:rxdart/rxdart.dart';
 
 // Campaign DAO provider
 final campaignDaoProvider = Provider<CampaignDao>((ref) => CampaignDao());
@@ -14,16 +17,29 @@ final campaignDaoProvider = Provider<CampaignDao>((ref) => CampaignDao());
 // Retry service provider
 final retryServiceProvider = Provider<RetryService>((ref) => RetryService.instance);
 
-// All campaigns stream provider
+// Event-driven campaign list with proper event integration
 final allCampaignsProvider = StreamProvider<List<CampaignModel>>((ref) {
   final dao = ref.watch(campaignDaoProvider);
-  return dao.watchAllCampaigns();
+  final syncService = RealtimeSyncService();
+  
+  // Watch database changes and emit events
+  return dao.watchAllCampaigns().map((campaigns) {
+    // Emit event for other components
+    syncService.emitEvent(DatabaseEvent(
+      tableName: 'campaigns',
+      type: DatabaseEventType.update,
+      timestamp: DateTime.now(),
+      source: 'CampaignProvider',
+      metadata: {'count': campaigns.length},
+    ));
+    return campaigns;
+  });
 });
 
 // Campaign by ID provider
-final campaignByIdProvider = FutureProvider.family<CampaignModel?, int>((ref, id) {
+final campaignByIdProvider = StreamProvider.family<CampaignModel?, int>((ref, id) {
   final dao = ref.watch(campaignDaoProvider);
-  return dao.getCampaignById(id);
+  return dao.watchCampaignById(id);
 });
 
 // Message logs for campaign provider
@@ -138,30 +154,19 @@ final campaignMonitoringProvider = StreamProvider.family<CampaignMonitoringData,
   }).asyncMap((future) => future);
 });
 
-// Campaign health monitoring provider
+// Event-driven campaign health provider
 final campaignHealthProvider = StreamProvider<List<CampaignHealthIndicator>>((ref) {
-  return Stream.periodic(const Duration(seconds: 5), (_) async {
-    final dao = ref.read(campaignDaoProvider);
-    final campaigns = await dao.watchAllCampaigns().first;
-    
-    List<CampaignHealthIndicator> healthIndicators = [];
-    
-    for (final campaign in campaigns.where((c) => c.isInProgress)) {
-      final statistics = await dao.getCampaignStatistics(campaign.id);
-      final messageLogs = await dao.watchMessageLogs(campaign.id).first;
-      
-      healthIndicators.add(CampaignHealthIndicator(
-        campaignId: campaign.id,
-        campaignName: campaign.name,
-        healthScore: _calculateHealthScore(statistics, messageLogs),
-        status: campaign.status,
-        issues: _detectIssues(statistics, messageLogs),
-        lastUpdated: DateTime.now(),
-      ));
-    }
-    
-    return healthIndicators;
-  }).asyncMap((future) => future);
+  final syncService = RealtimeSyncService();
+  
+  // Initial load
+  final initialStream = Stream.fromFuture(_fetchHealthIndicators(ref));
+  
+  // Event-driven updates
+  final eventStream = syncService.on<CampaignEvent>()
+      .debounceTime(const Duration(milliseconds: 500))
+      .asyncMap((_) => _fetchHealthIndicators(ref));
+  
+  return Rx.merge([initialStream, eventStream]).distinct();
 });
 
 // Campaign analytics provider
@@ -289,6 +294,30 @@ final campaignDuplicationProvider = StateNotifierProvider<CampaignDuplicationNot
 final campaignExportProvider = StateNotifierProvider<CampaignExportNotifier, CampaignExportState>((ref) {
   return CampaignExportNotifier(ref.watch(campaignDaoProvider));
 });
+
+Future<List<CampaignHealthIndicator>> _fetchHealthIndicators(Ref ref) async {
+  // Implementation moved to separate function for reuse
+  final dao = ref.read(campaignDaoProvider);
+  final campaigns = await dao.watchAllCampaigns().first;
+  
+  List<CampaignHealthIndicator> healthIndicators = [];
+  
+  for (final campaign in campaigns.where((c) => c.isInProgress)) {
+    final statistics = await dao.getCampaignStatistics(campaign.id);
+    final messageLogs = await dao.watchMessageLogs(campaign.id).first;
+    
+    healthIndicators.add(CampaignHealthIndicator(
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      healthScore: _calculateHealthScore(statistics, messageLogs),
+      status: campaign.status,
+      issues: _detectIssues(statistics, messageLogs),
+      lastUpdated: DateTime.now(),
+    ));
+  }
+  
+  return healthIndicators;
+}
 
 // Helper functions
 double _calculateHealthScore(CampaignStatistics statistics, List<MessageLogModel> logs) {

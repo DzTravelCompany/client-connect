@@ -2,11 +2,13 @@ import 'package:client_connect/src/features/templates/data/template_block_model.
 import 'package:drift/drift.dart';
 import '../../../core/models/database.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/realtime/realtime_sync_service.dart';
+import '../../../core/realtime/event_bus.dart';
 import 'template_model.dart';
-
 
 class TemplateDao {
   final AppDatabase _database = DatabaseService.instance.database;
+  final RealtimeSyncService _syncService = RealtimeSyncService();
 
   // Get all templates
   Stream<List<TemplateModel>> watchAllTemplates() {
@@ -36,20 +38,54 @@ class TemplateDao {
     return TemplateModel.fromDatabase(template);
   }
 
-  // Create new template
+  // Watch template by ID
+  Stream<TemplateModel?> watchTemplateById(int id) {
+    return (_database.select(_database.templates)
+          ..where((t) => t.id.equals(id)))
+        .watchSingleOrNull()
+        .map((template) => template != null ? TemplateModel.fromDatabase(template) : null);
+  }
+
+  // Create new template - ENHANCED WITH EVENT EMISSION
   Future<TemplateModel> createTemplate(TemplateModel template) async {
     final id = await _database.into(_database.templates).insert(template.toDatabase());
+    
+    // Emit real-time event
+    _syncService.emitEvent(TemplateEvent(
+      type: TemplateEventType.created,
+      templateId: id,
+      timestamp: DateTime.now(),
+      source: 'TemplateDao.createTemplate',
+      metadata: {
+        'name': template.name,
+        'templateType': template.templateType.name,
+        'blockCount': template.blocks.length,
+      },
+    ));
     
     // Return the created template with the new ID
     final createdTemplate = await getTemplateById(id);
     return createdTemplate!;
   }
 
-  // Update existing template
+  // Update existing template - ENHANCED WITH EVENT EMISSION
   Future<TemplateModel> updateTemplate(TemplateModel template) async {
     await (_database.update(_database.templates)
           ..where((t) => t.id.equals(template.id)))
         .write(template.toDatabaseUpdate());
+    
+    // Emit real-time event
+    _syncService.emitEvent(TemplateEvent(
+      type: TemplateEventType.updated,
+      templateId: template.id,
+      timestamp: DateTime.now(),
+      source: 'TemplateDao.updateTemplate',
+      metadata: {
+        'name': template.name,
+        'templateType': template.templateType.name,
+        'blockCount': template.blocks.length,
+      },
+    ));
     
     // Return the updated template
     final updatedTemplate = await getTemplateById(template.id);
@@ -60,22 +96,57 @@ class TemplateDao {
     try {
       final companion = template.toDatabaseUpdate();
       final rowsAffected = await _database.update(_database.templates).replace(companion);
+      
+      if (rowsAffected) {
+        // Emit real-time event
+        _syncService.emitEvent(TemplateEvent(
+          type: TemplateEventType.updated,
+          templateId: template.id,
+          timestamp: DateTime.now(),
+          source: 'TemplateDao.updateTemplatenew',
+          metadata: {
+            'name': template.name,
+            'templateType': template.templateType.name,
+          },
+        ));
+      }
+      
       return rowsAffected;
     } catch (e) {
       throw Exception('Failed to update template: $e');
     }
   }
 
-  // Delete template
+  // Delete template - ENHANCED WITH EVENT EMISSION
   Future<bool> deleteTemplate(int id) async {
+    // Get template data before deletion for event metadata
+    final templateData = await getTemplateById(id);
+    
     final deletedRows = await (_database.delete(_database.templates)
           ..where((t) => t.id.equals(id)))
         .go();
     
+    if (deletedRows > 0) {
+      // Emit real-time event
+      _syncService.emitEvent(TemplateEvent(
+        type: TemplateEventType.deleted,
+        templateId: id,
+        timestamp: DateTime.now(),
+        source: 'TemplateDao.deleteTemplate',
+        metadata: {
+          'deletedTemplate': templateData != null ? {
+            'name': templateData.name,
+            'templateType': templateData.templateType.name,
+            'blockCount': templateData.blocks.length,
+          } : null,
+        },
+      ));
+    }
+    
     return deletedRows > 0;
   }
 
-  // Duplicate template
+  // Duplicate template - ENHANCED WITH EVENT EMISSION
   Future<TemplateModel> duplicateTemplate(int id) async {
     final originalTemplate = await getTemplateById(id);
     if (originalTemplate == null) {
@@ -100,7 +171,22 @@ class TemplateDao {
       updatedAt: DateTime.now(),
     );
 
-    return await createTemplate(newTemplate);
+    final createdTemplate = await createTemplate(newTemplate);
+    
+    // Emit additional duplication event
+    _syncService.emitEvent(TemplateEvent(
+      type: TemplateEventType.duplicated,
+      templateId: createdTemplate.id,
+      timestamp: DateTime.now(),
+      source: 'TemplateDao.duplicateTemplate',
+      metadata: {
+        'originalTemplateId': id,
+        'originalTemplateName': originalTemplate.name,
+        'newTemplateName': createdTemplate.name,
+      },
+    ));
+
+    return createdTemplate;
   }
 
   // Search templates by name
@@ -153,13 +239,40 @@ class TemplateDao {
     return template != null;
   }
 
-  // Batch operations
+  // Batch operations - ENHANCED WITH EVENT EMISSION
   Future<void> deleteMultipleTemplates(List<int> ids) async {
+    if (ids.isEmpty) return;
+    
+    // Get template data before deletion for event metadata
+    final templatesData = <Map<String, dynamic>>[];
+    for (final id in ids) {
+      final template = await getTemplateById(id);
+      if (template != null) {
+        templatesData.add({
+          'id': id,
+          'name': template.name,
+          'templateType': template.templateType.name,
+        });
+      }
+    }
+    
     await _database.batch((batch) {
       for (final id in ids) {
         batch.deleteWhere(_database.templates, (t) => t.id.equals(id));
       }
     });
+    
+    // Emit real-time event
+    _syncService.emitEvent(TemplateEvent(
+      type: TemplateEventType.bulkDeleted,
+      timestamp: DateTime.now(),
+      source: 'TemplateDao.deleteMultipleTemplates',
+      metadata: {
+        'deletedCount': ids.length,
+        'templateIds': ids,
+        'deletedTemplates': templatesData,
+      },
+    ));
   }
 
   // Export templates (get all data for backup)
@@ -208,23 +321,22 @@ class TemplateDao {
 
   // Get templates with block statistics
   Future<List<Map<String, dynamic>>> getTemplatesWithStats() async {
-    final templates = await watchAllTemplates();
+    final templates = await watchAllTemplates().first;
     
-    return templates.expand((template) => template.map((t) {
+    return templates.map((t) {
       final blockTypeCounts = <String, int>{};
-      t.blocks.forEach((block) {
+      for (final block in t.blocks) {
         final typeName = block.type.name;
         blockTypeCounts[typeName] = (blockTypeCounts[typeName] ?? 0) + 1;
-      });
+      }
       
       return {
         'template': t,
         'block_count': t.blocks.length,
         'block_types': blockTypeCounts,
-        // 'has_placeholders': template.blocks.any((b) => b.type == TemplateBlockType.placeholder),
         'has_images': t.blocks.any((b) => b.type == TemplateBlockType.image),
         'has_buttons': t.blocks.any((b) => b.type == TemplateBlockType.button),
       };
-    })).toList();
+    }).toList();
   }
 }
