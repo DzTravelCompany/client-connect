@@ -29,15 +29,10 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
   bool _isInitialized = false;
   bool _hasUnsavedChanges = false;
   ClientModel? _originalClient;
-  
-  // Track the current client ID - this is key to fixing the autosave issue
-  int? _currentClientId;
-  bool _isCreatingNewClient = false;
 
   @override
   void initState() {
     super.initState();
-    _currentClientId = widget.clientId;
     _setupFormListeners();
   }
 
@@ -82,77 +77,28 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
     // Cancel previous timer and start new one
     _autosaveTimer?.cancel();
     _autosaveTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted && _hasUnsavedChanges && _shouldPerformAutosave()) {
+      if (mounted && _hasUnsavedChanges) {
         _performAutosave();
       }
     });
   }
 
-  // New method to determine if autosave should be performed
-  bool _shouldPerformAutosave() {
-    // Don't autosave if we're already in the process of creating a new client
-    if (_isCreatingNewClient) return false;
-    
-    // Don't autosave if required fields are empty for new clients
-    if (_currentClientId == null) {
-      final firstName = _firstNameController.text.trim();
-      final lastName = _lastNameController.text.trim();
-      if (firstName.isEmpty || lastName.isEmpty) {
-        return false;
-      }
-    }
-    
-    return true;
-  }
-
   Future<void> _performAutosave() async {
     if (!_formKey.currentState!.validate()) return;
     
-    // Prevent multiple simultaneous autosave operations
-    if (_isCreatingNewClient) return;
-    
     final client = _buildClientFromForm();
+    await ref.read(clientFormProvider.notifier).saveClient(client);
     
-    // Set flag to prevent duplicate creation attempts
-    if (_currentClientId == null) {
+    if (mounted) {
       setState(() {
-        _isCreatingNewClient = true;
+        _hasUnsavedChanges = false;
       });
-    }
-    
-    try {
-      final savedClientId = await ref.read(clientFormProvider.notifier).saveClient(client);
-      
-      if (savedClientId != null && mounted) {
-        // Update the current client ID if this was a new client creation
-        if (_currentClientId == null) {
-          setState(() {
-            _currentClientId = savedClientId;
-            _hasUnsavedChanges = false;
-            _isCreatingNewClient = false;
-          });
-          
-          // Update the original client reference
-          _originalClient = client.copyWith(id: savedClientId);
-        } else {
-          setState(() {
-            _hasUnsavedChanges = false;
-          });
-        }
-      }
-    } catch (e) {
-      // Handle error
-      if (mounted) {
-        setState(() {
-          _isCreatingNewClient = false;
-        });
-      }
     }
   }
 
   ClientModel _buildClientFromForm() {
     return ClientModel(
-      id: _currentClientId ?? 0, // Use the tracked client ID
+      id: widget.clientId ?? 0,
       firstName: _firstNameController.text.trim(),
       lastName: _lastNameController.text.trim(),
       email: _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
@@ -176,17 +122,16 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
     _addressController.text = client.address ?? '';
     _notesController.text = client.notes ?? '';
     _originalClient = client;
-    _currentClientId = client.id;
     _isInitialized = true;
   }
 
   @override
   Widget build(BuildContext context) {
     final formState = ref.watch(clientFormProvider);
-    final isEditing = _currentClientId != null; // Use tracked client ID
+    final isEditing = widget.clientId != null;
 
     // Load existing client data if editing
-    if (widget.clientId != null && !_isInitialized) {
+    if (isEditing && !_isInitialized) {
       ref.watch(clientByIdProvider(widget.clientId!)).whenData((client) {
         if (client != null && !_isInitialized) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -194,7 +139,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
           });
         }
       });
-    } else if (widget.clientId == null && !_isInitialized) {
+    } else if (!isEditing && !_isInitialized) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         setState(() {
           _isInitialized = true;
@@ -210,7 +155,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
             CommandBarButton(
               icon: const Icon(FluentIcons.save),
               label: const Text('Save'),
-              onPressed: (formState.isLoading || _isCreatingNewClient) ? null : _saveClient,
+              onPressed: formState.isLoading ? null : _saveClient,
             ),
           ],
         ),
@@ -219,8 +164,8 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // Status indicator - Updated to show creation state
-            if (formState.isLoading || _hasUnsavedChanges || formState.isSaved || _isCreatingNewClient)
+            // Status indicator
+            if (formState.isLoading || _hasUnsavedChanges || formState.isSaved)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -231,17 +176,14 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
                 ),
                 child: Row(
                   children: [
-                    if (formState.isLoading || _isCreatingNewClient) ...[
+                    if (formState.isLoading) ...[
                       const SizedBox(
                         width: 16,
                         height: 16,
                         child: ProgressRing(strokeWidth: 2),
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        _isCreatingNewClient ? 'Creating client...' : 'Saving...',
-                        style: const TextStyle(color: Colors.white),
-                      ),
+                      const Text('Saving...', style: TextStyle(color: Colors.white)),
                     ] else if (_hasUnsavedChanges) ...[
                       const Icon(FluentIcons.edit, size: 16, color: Colors.white),
                       const SizedBox(width: 8),
@@ -249,10 +191,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
                     ] else if (formState.isSaved) ...[
                       const Icon(FluentIcons.check_mark, size: 16, color: Colors.white),
                       const SizedBox(width: 8),
-                      Text(
-                        _currentClientId != null && _originalClient == null ? 'Client created' : 'Saved',
-                        style: const TextStyle(color: Colors.white),
-                      ),
+                      const Text('Saved', style: TextStyle(color: Colors.white)),
                     ],
                   ],
                 ),
@@ -438,7 +377,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
   }
 
   Color _getStatusColor(ClientFormState formState) {
-    if (formState.isLoading || _isCreatingNewClient) return Colors.blue;
+    if (formState.isLoading) return Colors.blue;
     if (_hasUnsavedChanges) return Colors.orange;
     if (formState.isSaved) return Colors.green;
     return Colors.grey;
@@ -448,21 +387,12 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final client = _buildClientFromForm();
-    final savedClientId = await ref.read(clientFormProvider.notifier).saveClient(client);
+    await ref.read(clientFormProvider.notifier).saveClient(client);
 
-    if (savedClientId != null && mounted) {
-      // Update the current client ID if this was a new client creation
-      if (_currentClientId == null) {
-        setState(() {
-          _currentClientId = savedClientId;
-        });
-      }
-      
-      final formState = ref.read(clientFormProvider);
-      if (formState.error == null) {
-        // Navigate back to client list on successful save
-        context.go('/clients');
-      }
+    final formState = ref.read(clientFormProvider);
+    if (formState.error == null && mounted) {
+      // Navigate back to client list on successful save
+      context.go('/clients');
     }
   }
 }

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:client_connect/constants.dart';
 import 'package:client_connect/src/core/models/database.dart';
 import 'package:client_connect/src/core/widgets/paginated_list_view.dart';
@@ -15,12 +14,15 @@ import 'package:fluent_ui/fluent_ui.dart';
 import '../../../core/realtime/reactive_providers.dart';
 import '../../../core/realtime/event_bus.dart';
 
+
 // Client DAO provider
 final clientDaoProvider = Provider<ClientDao>((ref) => ClientDao());
 
-// Real-time client provider - Fixed to prevent circular dependencies
+// Real-time client provider without circular event emission
 final allClientsProvider = StreamProvider<List<ClientModel>>((ref) {
   final dao = ref.watch(clientDaoProvider);
+  
+  // Just return the stream without emitting events that cause circular dependencies
   return dao.watchAllClients();
 });
 
@@ -30,22 +32,8 @@ final searchClientsProvider = StreamProvider.family<List<ClientModel>, String>((
   return dao.searchClients(searchTerm);
 });
 
-// Fixed paginated clients provider with proper auto-dispose
-final paginatedClientsProvider = StreamProvider.family.autoDispose<PaginatedResult<ClientModel>, PaginatedClientsParams>((ref, params) {
+final paginatedClientsProvider = StreamProvider.family<PaginatedResult<ClientModel>, PaginatedClientsParams>((ref, params) {
   final dao = ref.watch(clientDaoProvider);
-  
-  // Keep the provider alive for a short time to prevent unnecessary rebuilds
-  ref.keepAlive();
-  
-  // Set up a timer to dispose after 30 seconds of inactivity
-  final timer = Timer(const Duration(seconds: 30), () {
-    ref.invalidateSelf();
-  });
-  
-  ref.onDispose(() {
-    timer.cancel();
-  });
-  
   return dao.watchPaginatedClients(
     page: params.page,
     limit: params.limit,
@@ -69,22 +57,9 @@ final clientFormProvider = StateNotifierProvider<ClientFormNotifier, ClientFormS
   return ClientFormNotifier(ref.watch(clientDaoProvider), ref);
 });
 
-// Client companies provider - Fixed with auto-dispose and proper caching
-final clientCompaniesProvider = FutureProvider.autoDispose<List<String>>((ref) async {
+// Client companies provider - gets all unique companies from clients
+final clientCompaniesProvider = FutureProvider<List<String>>((ref) async {
   final dao = ref.watch(clientDaoProvider);
-  
-  // Keep the provider alive for a reasonable time
-  ref.keepAlive();
-  
-  // Set up a timer to dispose after 5 minutes of inactivity
-  final timer = Timer(const Duration(minutes: 5), () {
-    ref.invalidateSelf();
-  });
-  
-  ref.onDispose(() {
-    timer.cancel();
-  });
-  
   return await dao.getAllCompanies();
 });
 
@@ -145,21 +120,16 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> with RealtimePro
         // Refresh relevant data
         _ref.invalidate(allClientsProvider);
         _ref.invalidate(clientCompaniesProvider);
-        _ref.invalidate(paginatedClientsProvider);
       }
     });
   }
 
-  // Modified to return the client ID (new or existing)
-  Future<int?> saveClient(ClientModel client) async {
+  Future<void> saveClient(ClientModel client) async {
     state = state.copyWith(isLoading: true, error: null);
     
     try {
-      int clientId;
-      
       if (client.id == 0) {
-        // Creating new client
-        clientId = await _dao.insertClient(ClientsCompanion.insert(
+        final newId = await _dao.insertClient(ClientsCompanion.insert(
           firstName: client.firstName,
           lastName: client.lastName,
           email: Value(client.email),
@@ -173,14 +143,12 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> with RealtimePro
         // Emit real-time event after successful creation
         emitEvent(ClientEvent(
           type: ClientEventType.created,
-          clientId: clientId,
+          clientId: newId,
           timestamp: DateTime.now(),
           source: 'ClientFormNotifier',
           metadata: {'client_name': client.fullName},
         ));
       } else {
-        // Updating existing client
-        clientId = client.id;
         await _dao.updateClient(client.id, ClientsCompanion(
           firstName: Value(client.firstName),
           lastName: Value(client.lastName),
@@ -209,11 +177,8 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> with RealtimePro
           state = state.copyWith(isSaved: false);
         }
       });
-      
-      return clientId;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
-      return null;
     }
   }
 

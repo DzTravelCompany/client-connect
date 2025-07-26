@@ -31,16 +31,6 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
   DateTimeRange? _dateRange;
 
   @override
-  void initState() {
-    super.initState();
-    // Force refresh providers when screen initializes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.invalidate(paginatedClientsProvider);
-      ref.invalidate(clientCompaniesProvider);
-    });
-  }
-
-  @override
   void dispose() {
     _searchController.dispose();
     _debounceTimer?.cancel();
@@ -115,8 +105,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       sortAscending: _sortAscending,
     );
     
-    final provider = paginatedClientsProvider(params);
-    return Stream.fromFuture(ref.watch(provider.future));
+    return ref.watch(paginatedClientsProvider(params).stream);
   }
 
   @override
@@ -126,9 +115,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
     // Listen to client form state to refresh list when clients are saved
     ref.listen<ClientFormState>(clientFormProvider, (previous, next) {
       if (previous?.isSaved != next.isSaved && next.isSaved) {
-        // Invalidate providers to refresh data
-        ref.invalidate(paginatedClientsProvider);
-        ref.invalidate(clientCompaniesProvider);
+        // The list will rebuild automatically, just need to clear selection
         setState(() {
           _selectedClientIds.clear();
         });
@@ -138,9 +125,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
     // Listen to bulk operations to refresh list
     ref.listen<ClientBulkOperationsState>(clientBulkOperationsProvider, (previous, next) {
       if (previous?.successMessage != next.successMessage && next.successMessage != null) {
-        // Invalidate providers to refresh data
-        ref.invalidate(paginatedClientsProvider);
-        ref.invalidate(clientCompaniesProvider);
+        // The list will rebuild automatically, just need to clear selection
         setState(() {
           _selectedClientIds.clear();
         });
@@ -306,134 +291,51 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                               color: DesignTokens.textSecondary,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: DesignTokens.space4),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ComboBox<String>(
-                            value: _sortBy,
-                            items: const [
-                              ComboBoxItem(value: 'name', child: Text('Name')),
-                              ComboBoxItem(value: 'company', child: Text('Company')),
-                              ComboBoxItem(value: 'created', child: Text('Created')),
-                              ComboBoxItem(value: 'updated', child: Text('Updated')),
-                            ],
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() {
-                                  _sortBy = value;
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                        SizedBox(width: DesignTokens.space2),
-                        DesignSystemComponents.secondaryButton(
-                          text: '',
-                          icon: _sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down,
-                          onPressed: () {
-                            setState(() {
-                              _sortAscending = !_sortAscending;
-                            });
-                          },
-                          tooltip: _sortAscending ? 'Sort descending' : 'Sort ascending',
-                        ),
                       ],
                     ),
-                    SizedBox(height: DesignTokens.space3),
-                    DesignSystemComponents.primaryButton(
-                      text: 'Add Client',
-                      icon: FluentIcons.add,
-                      onPressed: () => context.go('/clients/add'),
-                    ),
-                  ],
-                ),
-              ],
-            );
-          }
-          
-          return Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(DesignTokens.space2),
-                decoration: BoxDecoration(
-                  color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.1),
-                  borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
-                  border: Border.all(
-                    color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.2),
                   ),
-                ),
-                child: Icon(
-                  FluentIcons.people,
-                  size: DesignTokens.iconSizeLarge,
-                  color: DesignTokens.accentPrimary,
-                ),
+                ],
               ),
-              SizedBox(width: DesignTokens.space3),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Clients',
-                      style: DesignTextStyles.titleLarge.copyWith(
-                        fontWeight: DesignTokens.fontWeightSemiBold,
-                      ),
-                    ),
-                    SizedBox(height: DesignTokens.space1),
-                    Text(
-                      'Manage your client relationships',
-                      style: DesignTextStyles.body.copyWith(
-                        color: DesignTokens.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              SizedBox(height: DesignTokens.space4),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(
-                    width: 140,
-                    child: ComboBox<String>(
-                      value: _sortBy,
-                      items: const [
-                        ComboBoxItem(value: 'name', child: Text('Name')),
-                        ComboBoxItem(value: 'company', child: Text('Company')),
-                        ComboBoxItem(value: 'created', child: Text('Created')),
-                        ComboBoxItem(value: 'updated', child: Text('Updated')),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ComboBox<String>(
+                          value: _sortBy,
+                          items: const [
+                            ComboBoxItem(value: 'name', child: Text('Name')),
+                            ComboBoxItem(value: 'company', child: Text('Company')),
+                            ComboBoxItem(value: 'created', child: Text('Created')),
+                            ComboBoxItem(value: 'updated', child: Text('Updated')),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() {
+                                _sortBy = value;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      SizedBox(width: DesignTokens.space2),
+                      DesignSystemComponents.secondaryButton(
+                        text: '',
+                        icon: _sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down,
+                        onPressed: () {
                           setState(() {
-                            _sortBy = value;
+                            _sortAscending = !_sortAscending;
                           });
-                        }
-                      },
-                    ),
+                        },
+                        tooltip: _sortAscending ? 'Sort descending' : 'Sort ascending',
+                      ),
+                    ],
                   ),
-                  SizedBox(width: DesignTokens.space2),
-                  DesignSystemComponents.secondaryButton(
-                    text: '',
-                    icon: _sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down,
-                    onPressed: () {
-                      setState(() {
-                        _sortAscending = !_sortAscending;
-                      });
-                    },
-                    tooltip: _sortAscending ? 'Sort descending' : 'Sort ascending',
-                  ),
-                  SizedBox(width: DesignTokens.space3),
+                  SizedBox(height: DesignTokens.space3),
                   DesignSystemComponents.primaryButton(
-                    text: 'Add',
+                    text: 'Add Client',
                     icon: FluentIcons.add,
                     onPressed: () => context.go('/clients/add'),
                   ),
@@ -441,10 +343,93 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
               ),
             ],
           );
-        },
-      ),
-    );
-  }
+        }
+        
+        return Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(DesignTokens.space2),
+              decoration: BoxDecoration(
+                color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.1),
+                borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                border: Border.all(
+                  color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.2),
+                ),
+              ),
+              child: Icon(
+                FluentIcons.people,
+                size: DesignTokens.iconSizeLarge,
+                color: DesignTokens.accentPrimary,
+              ),
+            ),
+            SizedBox(width: DesignTokens.space3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Clients',
+                    style: DesignTextStyles.titleLarge.copyWith(
+                      fontWeight: DesignTokens.fontWeightSemiBold,
+                    ),
+                  ),
+                  SizedBox(height: DesignTokens.space1),
+                  Text(
+                    'Manage your client relationships',
+                    style: DesignTextStyles.body.copyWith(
+                      color: DesignTokens.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 140,
+                  child: ComboBox<String>(
+                    value: _sortBy,
+                    items: const [
+                      ComboBoxItem(value: 'name', child: Text('Name')),
+                      ComboBoxItem(value: 'company', child: Text('Company')),
+                      ComboBoxItem(value: 'created', child: Text('Created')),
+                      ComboBoxItem(value: 'updated', child: Text('Updated')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _sortBy = value;
+                        });
+                      }
+                    },
+                  ),
+                ),
+                SizedBox(width: DesignTokens.space2),
+                DesignSystemComponents.secondaryButton(
+                  text: '',
+                  icon: _sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down,
+                  onPressed: () {
+                    setState(() {
+                      _sortAscending = !_sortAscending;
+                    });
+                  },
+                  tooltip: _sortAscending ? 'Sort descending' : 'Sort ascending',
+                ),
+                SizedBox(width: DesignTokens.space3),
+                DesignSystemComponents.primaryButton(
+                  text: 'Add',
+                  icon: FluentIcons.add,
+                  onPressed: () => context.go('/clients/add'),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
 
   Widget _buildBulkActionsBar() {
     return DesignSystemComponents.standardCard(
