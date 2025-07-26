@@ -124,12 +124,15 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> with RealtimePro
     });
   }
 
-  Future<void> saveClient(ClientModel client) async {
+  Future<int?> saveClient(ClientModel client) async {
     state = state.copyWith(isLoading: true, error: null);
     
     try {
+      int clientId;
+      
       if (client.id == 0) {
-        final newId = await _dao.insertClient(ClientsCompanion.insert(
+        // Creating new client
+        clientId = await _dao.insertClient(ClientsCompanion.insert(
           firstName: client.firstName,
           lastName: client.lastName,
           email: Value(client.email),
@@ -143,12 +146,14 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> with RealtimePro
         // Emit real-time event after successful creation
         emitEvent(ClientEvent(
           type: ClientEventType.created,
-          clientId: newId,
+          clientId: clientId,
           timestamp: DateTime.now(),
           source: 'ClientFormNotifier',
           metadata: {'client_name': client.fullName},
         ));
       } else {
+        // Updating existing client
+        clientId = client.id;
         await _dao.updateClient(client.id, ClientsCompanion(
           firstName: Value(client.firstName),
           lastName: Value(client.lastName),
@@ -177,8 +182,11 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> with RealtimePro
           state = state.copyWith(isSaved: false);
         }
       });
+      
+      return clientId;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
+      return null;
     }
   }
 
