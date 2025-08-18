@@ -104,8 +104,9 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       sortBy: _sortBy,
       sortAscending: _sortAscending,
     );
-    
-    return ref.watch(paginatedClientsProvider(params).stream);
+  
+    // Use the stream directly from the provider
+    return ref.read(paginatedClientsProvider(params).stream);
   }
 
   @override
@@ -115,7 +116,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
     // Listen to client form state to refresh list when clients are saved
     ref.listen<ClientFormState>(clientFormProvider, (previous, next) {
       if (previous?.isSaved != next.isSaved && next.isSaved) {
-        // The list will rebuild automatically, just need to clear selection
+        // Clear selection when data changes
         setState(() {
           _selectedClientIds.clear();
         });
@@ -125,7 +126,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
     // Listen to bulk operations to refresh list
     ref.listen<ClientBulkOperationsState>(clientBulkOperationsProvider, (previous, next) {
       if (previous?.successMessage != next.successMessage && next.successMessage != null) {
-        // The list will rebuild automatically, just need to clear selection
+        // Clear selection when data changes
         setState(() {
           _selectedClientIds.clear();
         });
@@ -180,26 +181,34 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                           SizedBox(height: DesignTokens.space3),
                         ],
 
-                        // Client cards list
+                        // Client cards list - Force rebuild when refresh trigger changes
                         Expanded(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) => PaginatedListView<ClientModel>(
-                              loadData: _loadClients,
-                              pageSize: 20,
-                              searchQuery: _searchTerm,
-                              itemBuilder: (client, index) => ConstrainedBox(
-                                constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-                                child: EnhancedClientCard(
-                                  client: client,
-                                  isSelected: _selectedClientIds.contains(client.id),
-                                  onTap: () => _onClientSelected(client.id),
-                                  onSelectionChanged: (selected) => _toggleClientSelection(client.id),
-                                  showSelection: _selectedClientIds.isNotEmpty,
+                          child: Consumer(
+                            builder: (context, ref, child) {
+                              // Watch the refresh trigger to force rebuild
+                              final refreshTrigger = ref.watch(clientRefreshTriggerProvider);
+                              
+                              return LayoutBuilder(
+                                builder: (context, constraints) => PaginatedListView<ClientModel>(
+                                  key: ValueKey('clients_${refreshTrigger}_${_searchTerm}_${_selectedTags.join(',')}_${_selectedCompany}_${_dateRange?.start}_${_sortBy}_$_sortAscending'),
+                                  loadData: _loadClients,
+                                  pageSize: 20,
+                                  searchQuery: _searchTerm,
+                                  itemBuilder: (client, index) => ConstrainedBox(
+                                    constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                                    child: EnhancedClientCard(
+                                      client: client,
+                                      isSelected: _selectedClientIds.contains(client.id),
+                                      onTap: () => _onClientSelected(client.id),
+                                      onSelectionChanged: (selected) => _toggleClientSelection(client.id),
+                                      showSelection: _selectedClientIds.isNotEmpty,
+                                    ),
+                                  ),
+                                  emptyBuilder: () => _buildEmptyState(),
+                                  errorBuilder: (error) => _buildErrorState(error),
                                 ),
-                              ),
-                              emptyBuilder: () => _buildEmptyState(),
-                              errorBuilder: (error) => _buildErrorState(error),
-                            ),
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -291,51 +300,134 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                               color: DesignTokens.textSecondary,
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: DesignTokens.space4),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ComboBox<String>(
+                            value: _sortBy,
+                            items: const [
+                              ComboBoxItem(value: 'name', child: Text('Name')),
+                              ComboBoxItem(value: 'company', child: Text('Company')),
+                              ComboBoxItem(value: 'created', child: Text('Created')),
+                              ComboBoxItem(value: 'updated', child: Text('Updated')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() {
+                                  _sortBy = value;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        SizedBox(width: DesignTokens.space2),
+                        DesignSystemComponents.secondaryButton(
+                          text: '',
+                          icon: _sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down,
+                          onPressed: () {
+                            setState(() {
+                              _sortAscending = !_sortAscending;
+                            });
+                          },
+                          tooltip: _sortAscending ? 'Sort descending' : 'Sort ascending',
+                        ),
                       ],
                     ),
+                    SizedBox(height: DesignTokens.space3),
+                    DesignSystemComponents.primaryButton(
+                      text: 'Add Client',
+                      icon: FluentIcons.add,
+                      onPressed: () => context.go('/clients/add'),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }
+          
+          return Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(DesignTokens.space2),
+                decoration: BoxDecoration(
+                  color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.1),
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+                  border: Border.all(
+                    color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.2),
                   ),
-                ],
+                ),
+                child: Icon(
+                  FluentIcons.people,
+                  size: DesignTokens.iconSizeLarge,
+                  color: DesignTokens.accentPrimary,
+                ),
               ),
-              SizedBox(height: DesignTokens.space4),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+              SizedBox(width: DesignTokens.space3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Clients',
+                      style: DesignTextStyles.titleLarge.copyWith(
+                        fontWeight: DesignTokens.fontWeightSemiBold,
+                      ),
+                    ),
+                    SizedBox(height: DesignTokens.space1),
+                    Text(
+                      'Manage your client relationships',
+                      style: DesignTextStyles.body.copyWith(
+                        color: DesignTokens.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ComboBox<String>(
-                          value: _sortBy,
-                          items: const [
-                            ComboBoxItem(value: 'name', child: Text('Name')),
-                            ComboBoxItem(value: 'company', child: Text('Company')),
-                            ComboBoxItem(value: 'created', child: Text('Created')),
-                            ComboBoxItem(value: 'updated', child: Text('Updated')),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() {
-                                _sortBy = value;
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                      SizedBox(width: DesignTokens.space2),
-                      DesignSystemComponents.secondaryButton(
-                        text: '',
-                        icon: _sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down,
-                        onPressed: () {
+                  SizedBox(
+                    width: 140,
+                    child: ComboBox<String>(
+                      value: _sortBy,
+                      items: const [
+                        ComboBoxItem(value: 'name', child: Text('Name')),
+                        ComboBoxItem(value: 'company', child: Text('Company')),
+                        ComboBoxItem(value: 'created', child: Text('Created')),
+                        ComboBoxItem(value: 'updated', child: Text('Updated')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
                           setState(() {
-                            _sortAscending = !_sortAscending;
+                            _sortBy = value;
                           });
-                        },
-                        tooltip: _sortAscending ? 'Sort descending' : 'Sort ascending',
-                      ),
-                    ],
+                        }
+                      },
+                    ),
                   ),
-                  SizedBox(height: DesignTokens.space3),
+                  SizedBox(width: DesignTokens.space2),
+                  DesignSystemComponents.secondaryButton(
+                    text: '',
+                    icon: _sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down,
+                    onPressed: () {
+                      setState(() {
+                        _sortAscending = !_sortAscending;
+                      });
+                    },
+                    tooltip: _sortAscending ? 'Sort descending' : 'Sort ascending',
+                  ),
+                  SizedBox(width: DesignTokens.space3),
                   DesignSystemComponents.primaryButton(
-                    text: 'Add Client',
+                    text: 'Add',
                     icon: FluentIcons.add,
                     onPressed: () => context.go('/clients/add'),
                   ),
@@ -343,93 +435,10 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
               ),
             ],
           );
-        }
-        
-        return Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(DesignTokens.space2),
-              decoration: BoxDecoration(
-                color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.1),
-                borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
-                border: Border.all(
-                  color: DesignTokens.withOpacity(DesignTokens.accentPrimary, 0.2),
-                ),
-              ),
-              child: Icon(
-                FluentIcons.people,
-                size: DesignTokens.iconSizeLarge,
-                color: DesignTokens.accentPrimary,
-              ),
-            ),
-            SizedBox(width: DesignTokens.space3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Clients',
-                    style: DesignTextStyles.titleLarge.copyWith(
-                      fontWeight: DesignTokens.fontWeightSemiBold,
-                    ),
-                  ),
-                  SizedBox(height: DesignTokens.space1),
-                  Text(
-                    'Manage your client relationships',
-                    style: DesignTextStyles.body.copyWith(
-                      color: DesignTokens.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 140,
-                  child: ComboBox<String>(
-                    value: _sortBy,
-                    items: const [
-                      ComboBoxItem(value: 'name', child: Text('Name')),
-                      ComboBoxItem(value: 'company', child: Text('Company')),
-                      ComboBoxItem(value: 'created', child: Text('Created')),
-                      ComboBoxItem(value: 'updated', child: Text('Updated')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() {
-                          _sortBy = value;
-                        });
-                      }
-                    },
-                  ),
-                ),
-                SizedBox(width: DesignTokens.space2),
-                DesignSystemComponents.secondaryButton(
-                  text: '',
-                  icon: _sortAscending ? FluentIcons.sort_up : FluentIcons.sort_down,
-                  onPressed: () {
-                    setState(() {
-                      _sortAscending = !_sortAscending;
-                    });
-                  },
-                  tooltip: _sortAscending ? 'Sort descending' : 'Sort ascending',
-                ),
-                SizedBox(width: DesignTokens.space3),
-                DesignSystemComponents.primaryButton(
-                  text: 'Add',
-                  icon: FluentIcons.add,
-                  onPressed: () => context.go('/clients/add'),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
-    ),
-  );
-}
+        },
+      ),
+    );
+  }
 
   Widget _buildBulkActionsBar() {
     return DesignSystemComponents.standardCard(
@@ -482,7 +491,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                       text: 'Delete',
                       icon: FluentIcons.delete,
                       onPressed: () => _showBulkDeleteDialog(),
-                      requireConfirmation: false, // We'll handle confirmation ourselves
+                      requireConfirmation: false,
                     ),
                     DesignSystemComponents.secondaryButton(
                       text: 'Clear',
@@ -529,7 +538,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                     text: 'Delete',
                     icon: FluentIcons.delete,
                     onPressed: () => _showBulkDeleteDialog(),
-                    requireConfirmation: false, // We'll handle confirmation ourselves
+                    requireConfirmation: false,
                   ),
                   DesignSystemComponents.secondaryButton(
                     text: 'Clear',

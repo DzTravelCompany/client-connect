@@ -35,18 +35,22 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
   String? _error;
   int _currentPage = 1;
   String? _lastSearchQuery;
+  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _loadInitialData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialData();
+    });
   }
 
   @override
   void didUpdateWidget(PaginatedListView<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.searchQuery != _lastSearchQuery) {
+    if (widget.searchQuery != _lastSearchQuery || 
+        widget.key != oldWidget.key) {
       _resetAndReload();
     }
   }
@@ -71,6 +75,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _isInitialized = false;
     });
 
     _subscription?.cancel();
@@ -84,6 +89,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
             _currentPage = 1;
             _lastSearchQuery = widget.searchQuery;
             _isLoading = false;
+            _isInitialized = true;
           });
         }
       },
@@ -92,6 +98,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
           setState(() {
             _error = e.toString();
             _isLoading = false;
+            _isInitialized = true;
           });
         }
       },
@@ -99,7 +106,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
   }
 
   void _loadMoreData() {
-    if (_isLoading || !_hasMore) return;
+    if (_isLoading || !_hasMore || !_isInitialized) return;
 
     setState(() {
       _isLoading = true;
@@ -134,11 +141,17 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
     _currentPage = 1;
     _hasMore = true;
     _error = null;
+    _isInitialized = false;
     _loadInitialData();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Show loading on initial load
+    if (!_isInitialized && _isLoading) {
+      return const Center(child: ProgressRing());
+    }
+
     if (_error != null && _items.isEmpty) {
       return widget.errorBuilder?.call(_error!) ??
           Center(
@@ -158,7 +171,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
           );
     }
 
-    if (_items.isEmpty && !_isLoading) {
+    if (_items.isEmpty && _isInitialized) {
       return widget.emptyBuilder?.call() ??
           const Center(
             child: Text('No items found'),
@@ -168,7 +181,7 @@ class _PaginatedListViewState<T> extends State<PaginatedListView<T>> {
     return ListView.builder(
       controller: _scrollController,
       padding: widget.padding,
-      itemCount: _items.length + (_hasMore ? 1 : 0),
+      itemCount: _items.length + (_hasMore && _isInitialized ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == _items.length) {
           return const Padding(

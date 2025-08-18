@@ -2,6 +2,7 @@
 /// 
 /// This file provides comprehensive guidance for integrating the design system
 /// throughout the application, ensuring consistency and maintainability.
+library;
 
 import 'package:fluent_ui/fluent_ui.dart';
 import 'design_tokens.dart';

@@ -1,3 +1,4 @@
+import 'package:client_connect/constants.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show Material;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,7 +10,6 @@ import 'package:client_connect/src/features/clients/logic/client_providers.dart'
 import 'package:client_connect/src/features/tags/data/tag_model.dart';
 import 'package:client_connect/src/features/tags/logic/tag_providers.dart';
 import 'package:client_connect/src/features/tags/presentation/widgets/tag_chip.dart';
-
 
 /// A compact modal dialog for selecting clients with smart suggestions
 class SmartClientSelectorModal extends ConsumerStatefulWidget {
@@ -802,42 +802,59 @@ class _SmartClientSelectorModalState extends ConsumerState<SmartClientSelectorMo
   void _applyFilters() {
     setState(() => _isLoading = true);
     
-    // Simulate a delay for filtering
-    Future.delayed(const Duration(milliseconds: 300), () {
+    Future.delayed(const Duration(milliseconds: 300), () async {
       if (!mounted) return;
       
       final clientsAsync = ref.read(allClientsProvider);
-      clientsAsync.whenData((clients) {
-        if (!mounted) return;
-        
-        List<ClientModel> filtered = clients;
-        
-        // Apply search filter
-        if (_searchTerm.isNotEmpty) {
-          final searchLower = _searchTerm.toLowerCase();
-          filtered = filtered.where((client) {
-            return client.fullName.toLowerCase().contains(searchLower) ||
-                (client.email?.toLowerCase().contains(searchLower) ?? false) ||
-                (client.company?.toLowerCase().contains(searchLower) ?? false);
-          }).toList();
-        }
-        
-        // Apply tag filters
-        if (_selectedTags.isNotEmpty) {
-          // This is a simplified implementation since we don't have direct access to client tags
-          // In a real implementation, you would filter based on the client's tags
-          final tagIds = _selectedTags.map((tag) => tag.id).toSet();
-          filtered = filtered.where((client) {
-            // Simulate tag filtering (in real implementation, check client's actual tags)
-            return client.id % tagIds.length == 0;
-          }).toList();
-        }
-        
-        setState(() {
-          _filteredClients = filtered;
-          _isLoading = false;
-        });
-      });
+      await clientsAsync.when(
+        data: (clients) async {
+          if (!mounted) return;
+          
+          List<ClientModel> filtered = clients;
+          
+          // Apply search filter
+          if (_searchTerm.isNotEmpty) {
+            final searchLower = _searchTerm.toLowerCase();
+            filtered = filtered.where((client) {
+              return client.fullName.toLowerCase().contains(searchLower) ||
+                  (client.email?.toLowerCase().contains(searchLower) ?? false) ||
+                  (client.company?.toLowerCase().contains(searchLower) ?? false);
+            }).toList();
+          }
+          
+          if (_selectedTags.isNotEmpty) {
+            try {
+              final tagNames = _selectedTags.map((tag) => tag.name).toList();
+              final clientDao = ref.read(clientDaoProvider);
+              final taggedClients = await clientDao.getClientsByTags(tagNames);
+              final taggedClientIds = taggedClients.map((c) => c.id).toSet();
+              
+              // Filter the current list to only include clients with selected tags
+              filtered = filtered.where((client) => taggedClientIds.contains(client.id)).toList();
+            } catch (e) {
+              // Fallback to original filtering if database query fails
+              logger.e('Error filtering by tags: $e');
+            }
+          }
+          
+          if (mounted) {
+            setState(() {
+              _filteredClients = filtered;
+              _isLoading = false;
+            });
+          }
+        },
+        loading: () {
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
+        },
+        error: (error, stack) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
+        },
+      );
     });
   }
   

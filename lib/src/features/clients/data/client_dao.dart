@@ -374,4 +374,28 @@ class ClientDao extends CachedRepository {
       updatedAt: row.updatedAt,
     );
   }
+
+   // New method to get client tags for a specific client
+  Future<List<String>> getClientTags(int clientId) async {
+    final query = _db.select(_db.tags).join([
+      innerJoin(_db.clientTags, _db.clientTags.tagId.equalsExp(_db.tags.id)),
+    ])..where(_db.clientTags.clientId.equals(clientId));
+    
+    final results = await query.get();
+    return results.map((result) => result.readTable(_db.tags).name).toList();
+  }
+
+  // New method to get clients by tag names
+  Future<List<ClientModel>> getClientsByTags(List<String> tagNames) async {
+    if (tagNames.isEmpty) return [];
+    
+    final query = _db.select(_db.clients).join([
+      innerJoin(_db.clientTags, _db.clientTags.clientId.equalsExp(_db.clients.id)),
+      innerJoin(_db.tags, _db.tags.id.equalsExp(_db.clientTags.tagId)),
+    ])..where(_db.tags.name.isIn(tagNames))
+      ..groupBy([_db.clients.id]);
+    
+    final results = await query.get();
+    return results.map((result) => _clientFromRow(result.readTable(_db.clients))).toList();
+  }
 }

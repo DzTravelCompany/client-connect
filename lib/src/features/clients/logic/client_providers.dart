@@ -32,8 +32,11 @@ final searchClientsProvider = StreamProvider.family<List<ClientModel>, String>((
   return dao.searchClients(searchTerm);
 });
 
-final paginatedClientsProvider = StreamProvider.family<PaginatedResult<ClientModel>, PaginatedClientsParams>((ref, params) {
+final clientRefreshTriggerProvider = StateProvider<int>((ref) => 0);
+
+final paginatedClientsProvider = StreamProvider.autoDispose.family<PaginatedResult<ClientModel>, PaginatedClientsParams>((ref, params) {
   final dao = ref.watch(clientDaoProvider);
+  ref.watch(clientRefreshTriggerProvider);
   return dao.watchPaginatedClients(
     page: params.page,
     limit: params.limit,
@@ -60,6 +63,7 @@ final clientFormProvider = StateNotifierProvider<ClientFormNotifier, ClientFormS
 // Client companies provider - gets all unique companies from clients
 final clientCompaniesProvider = FutureProvider<List<String>>((ref) async {
   final dao = ref.watch(clientDaoProvider);
+  ref.watch(clientRefreshTriggerProvider);
   return await dao.getAllCompanies();
 });
 
@@ -116,12 +120,20 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> with RealtimePro
   void initializeEventListeners() {
     // Listen to client events from other sources
     listenToEvents<ClientEvent>((event) {
-      if (event.type == ClientEventType.updated || event.type == ClientEventType.created) {
-        // Refresh relevant data
-        _ref.invalidate(allClientsProvider);
-        _ref.invalidate(clientCompaniesProvider);
+      if (event.type == ClientEventType.updated || 
+          event.type == ClientEventType.created ||
+          event.type == ClientEventType.deleted ||
+          event.type == ClientEventType.bulkDeleted ||
+          event.type == ClientEventType.bulkUpdated) {
+        // Trigger refresh by incrementing the counter
+        _triggerRefresh();
       }
     });
+  }
+
+  void _triggerRefresh() {
+    final currentValue = _ref.read(clientRefreshTriggerProvider);
+    _ref.read(clientRefreshTriggerProvider.notifier).state = currentValue + 1;
   }
 
   Future<int?> saveClient(ClientModel client) async {
