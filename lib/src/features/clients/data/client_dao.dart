@@ -28,82 +28,167 @@ class ClientDao extends CachedRepository {
     String? searchTerm,
     List<String>? tags,
     String? company,
+    String? jobTitle, // Added jobTitle parameter
+    DateTimeRange? dateRange,
+    String sortBy = 'name',
+    bool sortAscending = true,
+  }) {
+    return _buildPaginatedClientsQuery(
+      page: page,
+      limit: limit,
+      searchTerm: searchTerm,
+      tags: tags,
+      company: company,
+      jobTitle: jobTitle, // Pass jobTitle parameter
+      dateRange: dateRange,
+      sortBy: sortBy,
+      sortAscending: sortAscending,
+    );
+  }
+
+  Stream<PaginatedResult<ClientModel>> _buildPaginatedClientsQuery({
+    required int page,
+    required int limit,
+    String? searchTerm,
+    List<String>? tags,
+    String? company,
+    String? jobTitle, // Added jobTitle parameter
     DateTimeRange? dateRange,
     String sortBy = 'name',
     bool sortAscending = true,
   }) {
     final offset = (page - 1) * limit;
 
-    // Build base query
-    var query = _db.select(_db.clients);
+    // Build base query - use join if tags are specified
+    late final JoinedSelectStatement query;
+    late final Stream<int> countStream;
 
-    // Add search filter if provided
-    if (searchTerm != null && searchTerm.isNotEmpty) {
-      query = query
-        ..where((c) =>
-            c.firstName.contains(searchTerm) |
-            c.lastName.contains(searchTerm) |
-            c.email.contains(searchTerm) |
-            c.company.contains(searchTerm));
-    }
+    if (tags != null && tags.isNotEmpty) {
+      // Query with tag filtering - use joins
+      query = _db.select(_db.clients).join([
+        innerJoin(_db.clientTags, _db.clientTags.clientId.equalsExp(_db.clients.id)),
+        innerJoin(_db.tags, _db.tags.id.equalsExp(_db.clientTags.tagId)),
+      ]);
 
-    // Add company filter if provided
-    if (company != null && company.isNotEmpty) {
-      query = query..where((c) => c.company.equals(company));
-    }
+      // Create a separate count query that counts distinct client IDs
+      final distinctCountQuery = _db.selectOnly(_db.clients).join([
+        innerJoin(_db.clientTags, _db.clientTags.clientId.equalsExp(_db.clients.id)),
+        innerJoin(_db.tags, _db.tags.id.equalsExp(_db.clientTags.tagId)),
+      ]);
+      distinctCountQuery.addColumns([_db.clients.id.count(distinct: true)]);
 
-    // Add date range filter if provided
-    if (dateRange != null) {
-      query = query
-        ..where((c) =>
-            c.createdAt.isBiggerOrEqualValue(dateRange.start) &
-            c.createdAt.isSmallerOrEqualValue(dateRange.end));
+      // Add tag name filter
+      query.where(_db.tags.name.isIn(tags));
+      distinctCountQuery.where(_db.tags.name.isIn(tags));
+
+      // Group by client ID to avoid duplicates when client has multiple matching tags
+      query.groupBy([_db.clients.id]);
+      // Don't group the count query - we want the total distinct count
+
+      // Add search filter if provided
+      if (searchTerm != null && searchTerm.isNotEmpty) {
+        final searchCondition = _db.clients.firstName.contains(searchTerm) |
+            _db.clients.lastName.contains(searchTerm) |
+            _db.clients.email.contains(searchTerm) |
+            _db.clients.company.contains(searchTerm);
+        
+        query.where(searchCondition);
+        distinctCountQuery.where(searchCondition);
+      }
+
+      // Add company filter if provided
+      if (company != null && company.isNotEmpty) {
+        query.where(_db.clients.company.equals(company));
+        distinctCountQuery.where(_db.clients.company.equals(company));
+      }
+
+      if (jobTitle != null && jobTitle.isNotEmpty) {
+        query.where(_db.clients.jobTitle.equals(jobTitle));
+        distinctCountQuery.where(_db.clients.jobTitle.equals(jobTitle));
+      }
+
+      // Add date range filter if provided
+      if (dateRange != null) {
+        final dateCondition = _db.clients.createdAt.isBiggerOrEqualValue(dateRange.start) &
+            _db.clients.createdAt.isSmallerOrEqualValue(dateRange.end);
+        
+        query.where(dateCondition);
+        distinctCountQuery.where(dateCondition);
+      }
+
+      // Create count stream that properly handles the single result
+      countStream = distinctCountQuery.map((row) => row.read(_db.clients.id.count(distinct: true)) ?? 0).watchSingle();
+    } else {
+      // Query without tag filtering - simple select
+      query = _db.select(_db.clients).join([]);
+      final countQuery = _db.selectOnly(_db.clients).join([]);
+      countQuery.addColumns([_db.clients.id.count()]);
+
+      // Add search filter if provided
+      if (searchTerm != null && searchTerm.isNotEmpty) {
+        final searchCondition = _db.clients.firstName.contains(searchTerm) |
+            _db.clients.lastName.contains(searchTerm) |
+            _db.clients.email.contains(searchTerm) |
+            _db.clients.company.contains(searchTerm);
+        
+        query.where(searchCondition);
+        countQuery.where(searchCondition);
+      }
+
+      // Add company filter if provided
+      if (company != null && company.isNotEmpty) {
+        query.where(_db.clients.company.equals(company));
+        countQuery.where(_db.clients.company.equals(company));
+      }
+
+      if (jobTitle != null && jobTitle.isNotEmpty) {
+        query.where(_db.clients.jobTitle.equals(jobTitle));
+        countQuery.where(_db.clients.jobTitle.equals(jobTitle));
+      }
+
+      // Add date range filter if provided
+      if (dateRange != null) {
+        final dateCondition = _db.clients.createdAt.isBiggerOrEqualValue(dateRange.start) &
+            _db.clients.createdAt.isSmallerOrEqualValue(dateRange.end);
+        
+        query.where(dateCondition);
+        countQuery.where(dateCondition);
+      }
+
+      countStream = countQuery.map((row) => row.read(_db.clients.id.count()) ?? 0).watchSingle();
     }
 
     // Add ordering
     switch (sortBy.toLowerCase()) {
       case 'company':
-        query = query
-          ..orderBy([(c) => OrderingTerm(expression: c.company, mode: sortAscending ? OrderingMode.asc : OrderingMode.desc)]);
+        query.orderBy([OrderingTerm(expression: _db.clients.company, mode: sortAscending ? OrderingMode.asc : OrderingMode.desc)]);
         break;
       case 'created':
-        query = query
-          ..orderBy([(c) => OrderingTerm(expression: c.createdAt, mode: sortAscending ? OrderingMode.asc : OrderingMode.desc)]);
+        query.orderBy([OrderingTerm(expression: _db.clients.createdAt, mode: sortAscending ? OrderingMode.asc : OrderingMode.desc)]);
         break;
       case 'updated':
-        query = query
-          ..orderBy([(c) => OrderingTerm(expression: c.updatedAt, mode: sortAscending ? OrderingMode.asc : OrderingMode.desc)]);
+        query.orderBy([OrderingTerm(expression: _db.clients.updatedAt, mode: sortAscending ? OrderingMode.asc : OrderingMode.desc)]);
+        break;
+      case 'jobtitle':
+        query.orderBy([OrderingTerm(expression: _db.clients.jobTitle, mode: sortAscending ? OrderingMode.asc : OrderingMode.desc)]);
         break;
       default: // name
-        query = query
-          ..orderBy([
-            (c) => OrderingTerm(expression: c.firstName, mode: sortAscending ? OrderingMode.asc : OrderingMode.desc),
-            (c) => OrderingTerm(expression: c.lastName, mode: sortAscending ? OrderingMode.asc : OrderingMode.desc),
-          ]);
+        query.orderBy([
+          OrderingTerm(expression: _db.clients.firstName, mode: sortAscending ? OrderingMode.asc : OrderingMode.desc),
+          OrderingTerm(expression: _db.clients.lastName, mode: sortAscending ? OrderingMode.asc : OrderingMode.desc),
+        ]);
     }
 
-    final countQuery = _db.selectOnly(_db.clients)
-      ..addColumns([_db.clients.id.count()]);
-    if (searchTerm != null && searchTerm.isNotEmpty) {
-      countQuery.where(_db.clients.firstName.contains(searchTerm) |
-          _db.clients.lastName.contains(searchTerm) |
-          _db.clients.email.contains(searchTerm) |
-          _db.clients.company.contains(searchTerm));
-    }
-    if (company != null && company.isNotEmpty) {
-      countQuery.where(_db.clients.company.equals(company));
-    }
-    if (dateRange != null) {
-      countQuery.where(_db.clients.createdAt.isBiggerOrEqualValue(dateRange.start) &
-          _db.clients.createdAt.isSmallerOrEqualValue(dateRange.end));
-    }
+    // Apply pagination
+    query.limit(limit, offset: offset);
 
-    final resultsStream = (query..limit(limit, offset: offset)).watch();
-    final countStream = countQuery.map((row) => row.read(_db.clients.id.count()) ?? 0).watchSingle();
+    final resultsStream = query.watch();
 
-    return Rx.combineLatest2(resultsStream, countStream, (clients, totalCount) {
+    return Rx.combineLatest2(resultsStream, countStream, (results, totalCount) {
+      final clients = results.map((row) => _clientFromRow(row.readTable(_db.clients))).toList();
+      
       return PaginatedResult<ClientModel>(
-        items: clients.map((row) => _clientFromRow(row)).toList(),
+        items: clients,
         hasMore: offset + clients.length < totalCount,
         totalCount: totalCount,
       );
@@ -151,6 +236,7 @@ class ClientDao extends CachedRepository {
     // Invalidate paginated cache entries
     invalidateCache(CacheKeys.clientPrefix);
     invalidateCache(CacheKeys.clientCompanies);
+    invalidateCache(CacheKeys.clientJobTitles); // Invalidate job titles cache
   
     return result;
   }
@@ -178,6 +264,7 @@ class ClientDao extends CachedRepository {
       clearCacheEntry(CacheKeys.clientById(id));
       invalidateCache(CacheKeys.clientPrefix);
       invalidateCache(CacheKeys.clientCompanies);
+      invalidateCache(CacheKeys.clientJobTitles); // Invalidate job titles cache
     }
   
     return updatedRows > 0;
@@ -211,6 +298,7 @@ class ClientDao extends CachedRepository {
       clearCacheEntry(CacheKeys.clientById(id));
       invalidateCache(CacheKeys.clientPrefix);
       invalidateCache(CacheKeys.clientCompanies);
+      invalidateCache(CacheKeys.clientJobTitles); // Invalidate job titles cache
     }
   
     return deletedRows > 0;
@@ -246,6 +334,28 @@ class ClientDao extends CachedRepository {
         return results
             .map((row) => row.read(_db.clients.company) ?? '')
             .where((company) => company.isNotEmpty)
+            .toList();
+      },
+      ttl: CacheManager.defaultTtl, // Cache for 5 minutes
+    );
+  }
+
+  Future<List<String>> getAllJobTitles() async {
+    final cacheKey = CacheKeys.clientJobTitles;
+    
+    return await getCached(
+      cacheKey,
+      () async {
+        final query = _db.selectOnly(_db.clients)
+          ..addColumns([_db.clients.jobTitle])
+          ..where(_db.clients.jobTitle.isNotNull() & _db.clients.jobTitle.isNotValue(''))
+          ..groupBy([_db.clients.jobTitle])
+          ..orderBy([OrderingTerm.asc(_db.clients.jobTitle)]);
+        
+        final results = await query.get();
+        return results
+            .map((row) => row.read(_db.clients.jobTitle) ?? '')
+            .where((jobTitle) => jobTitle.isNotEmpty)
             .toList();
       },
       ttl: CacheManager.defaultTtl, // Cache for 5 minutes
@@ -288,6 +398,7 @@ class ClientDao extends CachedRepository {
       }
       invalidateCache(CacheKeys.clientPrefix);
       invalidateCache(CacheKeys.clientCompanies);
+      invalidateCache(CacheKeys.clientJobTitles); // Invalidate job titles cache
     }
     
     return deletedRows;
@@ -326,6 +437,7 @@ class ClientDao extends CachedRepository {
       }
       invalidateCache(CacheKeys.clientPrefix);
       invalidateCache(CacheKeys.clientCompanies);
+      invalidateCache(CacheKeys.clientJobTitles); // Invalidate job titles cache
     }
     
     return updatedRows;

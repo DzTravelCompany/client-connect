@@ -46,6 +46,8 @@ class _SmartClientSelectorModalState extends ConsumerState<SmartClientSelectorMo
   final TextEditingController _searchController = TextEditingController();
   String _searchTerm = '';
   List<TagModel> _selectedTags = [];
+  String? _selectedCompany; // Added company filter state
+  String? _selectedJobTitle; // Added job title filter state
   Timer? _debounceTimer;
   
   // Client selection state
@@ -78,7 +80,7 @@ class _SmartClientSelectorModalState extends ConsumerState<SmartClientSelectorMo
     final tagsAsync = ref.watch(allTagsProvider);
     
     return ContentDialog(
-      constraints: const BoxConstraints(maxWidth: 800, maxHeight: 700),
+      constraints: const BoxConstraints(maxWidth: 900, maxHeight: 750), // Increased width for additional filters
       title: _buildHeader(),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,7 +90,7 @@ class _SmartClientSelectorModalState extends ConsumerState<SmartClientSelectorMo
           
           const SizedBox(height: 16),
           
-          // Selection stats
+          // Selection stats and bulk actions
           if (_selectedClients.isNotEmpty)
             _buildSelectionStats(),
             
@@ -211,19 +213,63 @@ class _SmartClientSelectorModalState extends ConsumerState<SmartClientSelectorMo
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Filter by tags:',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Tags filter column
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Filter by tags:',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          tagsAsync.when(
+                            data: (tags) => _buildTagFilters(tags),
+                            loading: () => const SizedBox(
+                              height: 32,
+                              child: ProgressRing(strokeWidth: 2),
+                            ),
+                            error: (_, __) => const Text('Failed to load tags'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    const SizedBox(width: 24),
+                    
+                    // Company and Job Title filters column
+                    Expanded(
+                      flex: 1,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Company filter
+                          const Text(
+                            'Company:',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          _buildCompanyFilter(),
+                          
+                          const SizedBox(height: 16),
+                          
+                          // Job Title filter
+                          const Text(
+                            'Job Title:',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          _buildJobTitleFilter(),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                tagsAsync.when(
-                  data: (tags) => _buildTagFilters(tags),
-                  loading: () => const SizedBox(
-                    height: 32,
-                    child: ProgressRing(strokeWidth: 2),
-                  ),
-                  error: (_, __) => const Text('Failed to load tags'),
-                ),
+                
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -235,10 +281,31 @@ class _SmartClientSelectorModalState extends ConsumerState<SmartClientSelectorMo
                           _searchController.clear();
                           _searchTerm = '';
                           _selectedTags = [];
+                          _selectedCompany = null; // Clear company filter
+                          _selectedJobTitle = null; // Clear job title filter
                         });
                         _applyFilters();
                       } : null,
                     ),
+                    const SizedBox(width: 16),
+                    if (_filteredClients.isNotEmpty)
+                      DesignSystemComponents.primaryButton(
+                        text: 'Select All Filtered (${_filteredClients.length})',
+                        icon: FluentIcons.select_all,
+                        onPressed: () {
+                          setState(() {
+                            // Add all filtered clients that aren't already selected
+                            for (final client in _filteredClients) {
+                              if (!_selectedClients.any((c) => c.id == client.id)) {
+                                if (widget.maxSelections == null || 
+                                    _selectedClients.length < widget.maxSelections!) {
+                                  _selectedClients.add(client);
+                                }
+                              }
+                            }
+                          });
+                        },
+                      ),
                     const Spacer(),
                     Text(
                       '${_filteredClients.length} clients match filters',
@@ -254,6 +321,76 @@ class _SmartClientSelectorModalState extends ConsumerState<SmartClientSelectorMo
           ) : null,
         ),
       ],
+    );
+  }
+  
+  Widget _buildCompanyFilter() {
+    final companiesAsync = ref.watch(clientCompaniesProvider);
+    
+    return companiesAsync.when(
+      data: (companies) {
+        return SizedBox(
+          width: double.infinity,
+          child: ComboBox<String>(
+            placeholder: const Text('All Companies'),
+            value: _selectedCompany,
+            items: [
+              const ComboBoxItem<String>(
+                value: null,
+                child: Text('All Companies'),
+              ),
+              ...companies.map((company) => ComboBoxItem<String>(
+                value: company,
+                child: Text(company),
+              )),
+            ],
+            onChanged: (value) {
+              setState(() => _selectedCompany = value);
+              _applyFilters();
+            },
+          ),
+        );
+      },
+      loading: () => const SizedBox(
+        height: 32,
+        child: ProgressRing(strokeWidth: 2),
+      ),
+      error: (_, __) => const Text('Failed to load companies'),
+    );
+  }
+  
+  Widget _buildJobTitleFilter() {
+    final jobTitlesAsync = ref.watch(clientJobTitlesProvider);
+    
+    return jobTitlesAsync.when(
+      data: (jobTitles) {
+        return SizedBox(
+          width: double.infinity,
+          child: ComboBox<String>(
+            placeholder: const Text('All Job Titles'),
+            value: _selectedJobTitle,
+            items: [
+              const ComboBoxItem<String>(
+                value: null,
+                child: Text('All Job Titles'),
+              ),
+              ...jobTitles.map((jobTitle) => ComboBoxItem<String>(
+                value: jobTitle,
+                child: Text(jobTitle),
+              )),
+            ],
+            onChanged: (value) {
+              setState(() => _selectedJobTitle = value);
+              _applyFilters();
+            },
+          ),
+        );
+      },
+      loading: () => const SizedBox(
+        height: 32,
+        child: ProgressRing(strokeWidth: 2),
+      ),
+      error: (_, __) => const Text('Failed to load job titles'),
     );
   }
   
@@ -482,7 +619,7 @@ class _SmartClientSelectorModalState extends ConsumerState<SmartClientSelectorMo
       );
     }
     
-    if (_filteredClients.isEmpty && _searchTerm.isEmpty && _selectedTags.isEmpty) {
+    if (_filteredClients.isEmpty && _searchTerm.isEmpty && _selectedTags.isEmpty && _selectedCompany == null && _selectedJobTitle == null) {
       // Initialize filtered clients if needed
       _filteredClients = clients;
     }
@@ -743,6 +880,8 @@ class _SmartClientSelectorModalState extends ConsumerState<SmartClientSelectorMo
                   _searchController.clear();
                   _searchTerm = '';
                   _selectedTags = [];
+                  _selectedCompany = null; // Clear company filter
+                  _selectedJobTitle = null; // Clear job title filter
                 });
                 _applyFilters();
               },
@@ -822,6 +961,14 @@ class _SmartClientSelectorModalState extends ConsumerState<SmartClientSelectorMo
             }).toList();
           }
           
+          if (_selectedCompany != null && _selectedCompany!.isNotEmpty) {
+            filtered = filtered.where((client) => client.company == _selectedCompany).toList();
+          }
+          
+          if (_selectedJobTitle != null && _selectedJobTitle!.isNotEmpty) {
+            filtered = filtered.where((client) => client.jobTitle == _selectedJobTitle).toList();
+          }
+
           if (_selectedTags.isNotEmpty) {
             try {
               final tagNames = _selectedTags.map((tag) => tag.name).toList();
@@ -859,7 +1006,10 @@ class _SmartClientSelectorModalState extends ConsumerState<SmartClientSelectorMo
   }
   
   bool _hasActiveFilters() {
-    return _searchTerm.isNotEmpty || _selectedTags.isNotEmpty;
+    return _searchTerm.isNotEmpty || 
+           _selectedTags.isNotEmpty || 
+           (_selectedCompany != null && _selectedCompany!.isNotEmpty) || // Include company filter
+           (_selectedJobTitle != null && _selectedJobTitle!.isNotEmpty); // Include job title filter
   }
   
   void _generateSuggestions() {

@@ -6,6 +6,7 @@ import 'package:client_connect/src/features/campaigns/logic/campaign_providers.d
 import 'package:client_connect/src/features/clients/data/client_activity_dao.dart';
 import 'package:client_connect/src/features/clients/data/client_activity_model.dart';
 import 'package:client_connect/src/features/clients/logic/client_activity_providers.dart';
+import 'package:client_connect/src/features/tags/data/tag_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/client_dao.dart';
 import '../data/client_model.dart';
@@ -13,7 +14,7 @@ import 'package:drift/drift.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import '../../../core/realtime/reactive_providers.dart';
 import '../../../core/realtime/event_bus.dart';
-
+import 'package:client_connect/src/features/tags/logic/tag_providers.dart';
 
 // Client DAO provider
 final clientDaoProvider = Provider<ClientDao>((ref) => ClientDao());
@@ -37,12 +38,22 @@ final clientRefreshTriggerProvider = StateProvider<int>((ref) => 0);
 final paginatedClientsProvider = StreamProvider.autoDispose.family<PaginatedResult<ClientModel>, PaginatedClientsParams>((ref, params) {
   final dao = ref.watch(clientDaoProvider);
   ref.watch(clientRefreshTriggerProvider);
+  
+  ref.listen<AsyncValue<List<TagModel>>>(allTagsProvider, (previous, next) {
+    // Trigger refresh when tags change (creation, deletion, updates)
+    if (previous != null && next.hasValue && previous.hasValue) {
+      final currentValue = ref.read(clientRefreshTriggerProvider);
+      ref.read(clientRefreshTriggerProvider.notifier).state = currentValue + 1;
+    }
+  });
+
   return dao.watchPaginatedClients(
     page: params.page,
     limit: params.limit,
     searchTerm: params.searchTerm,
     tags: params.tags,
     company: params.company,
+    jobTitle: params.jobTitle,
     dateRange: params.dateRange,
     sortBy: params.sortBy,
     sortAscending: params.sortAscending,
@@ -65,6 +76,12 @@ final clientCompaniesProvider = FutureProvider<List<String>>((ref) async {
   final dao = ref.watch(clientDaoProvider);
   ref.watch(clientRefreshTriggerProvider);
   return await dao.getAllCompanies();
+});
+
+final clientJobTitlesProvider = FutureProvider<List<String>>((ref) async {
+  final dao = ref.watch(clientDaoProvider);
+  ref.watch(clientRefreshTriggerProvider);
+  return await dao.getAllJobTitles();
 });
 
 // Client campaigns provider - gets campaigns for a specific client
@@ -126,6 +143,17 @@ class ClientFormNotifier extends StateNotifier<ClientFormState> with RealtimePro
           event.type == ClientEventType.bulkDeleted ||
           event.type == ClientEventType.bulkUpdated) {
         // Trigger refresh by incrementing the counter
+        _triggerRefresh();
+      }
+    });
+    
+    listenToEvents<TagEvent>((event) {
+      if (event.type == TagEventType.assigned || 
+          event.type == TagEventType.unassigned ||
+          event.type == TagEventType.created ||
+          event.type == TagEventType.updated ||
+          event.type == TagEventType.deleted) {
+        // Trigger refresh when tag assignments change
         _triggerRefresh();
       }
     });
@@ -315,6 +343,7 @@ class ClientFilterPersistenceState {
   final String? searchTerm;
   final List<String> selectedTags;
   final String? selectedCompany;
+  final String? selectedJobTitle;
   final DateTimeRange? dateRange;
   final String sortBy;
   final bool sortAscending;
@@ -323,6 +352,7 @@ class ClientFilterPersistenceState {
     this.searchTerm,
     this.selectedTags = const [],
     this.selectedCompany,
+    this.selectedJobTitle,
     this.dateRange,
     this.sortBy = 'name',
     this.sortAscending = true,
@@ -332,6 +362,7 @@ class ClientFilterPersistenceState {
     String? searchTerm,
     List<String>? selectedTags,
     String? selectedCompany,
+    String? selectedJobTitle,
     DateTimeRange? dateRange,
     String? sortBy,
     bool? sortAscending,
@@ -340,6 +371,7 @@ class ClientFilterPersistenceState {
       searchTerm: searchTerm ?? this.searchTerm,
       selectedTags: selectedTags ?? this.selectedTags,
       selectedCompany: selectedCompany ?? this.selectedCompany,
+      selectedJobTitle: selectedJobTitle ?? this.selectedJobTitle,
       dateRange: dateRange ?? this.dateRange,
       sortBy: sortBy ?? this.sortBy,
       sortAscending: sortAscending ?? this.sortAscending,
@@ -357,6 +389,7 @@ class ClientFilterPersistenceNotifier extends StateNotifier<ClientFilterPersiste
     String? searchTerm,
     List<String>? selectedTags,
     String? selectedCompany,
+    String? selectedJobTitle,
     DateTimeRange? dateRange,
     String? sortBy,
     bool? sortAscending,
@@ -365,6 +398,7 @@ class ClientFilterPersistenceNotifier extends StateNotifier<ClientFilterPersiste
       searchTerm: searchTerm,
       selectedTags: selectedTags,
       selectedCompany: selectedCompany,
+      selectedJobTitle: selectedJobTitle,
       dateRange: dateRange,
       sortBy: sortBy,
       sortAscending: sortAscending,
@@ -397,6 +431,7 @@ class PaginatedClientsParams {
   final String? searchTerm;
   final List<String>? tags;
   final String? company;
+  final String? jobTitle;
   final DateTimeRange? dateRange;
   final String sortBy;
   final bool sortAscending;
@@ -407,6 +442,7 @@ class PaginatedClientsParams {
     this.searchTerm,
     this.tags,
     this.company,
+    this.jobTitle,
     this.dateRange,
     this.sortBy = 'name',
     this.sortAscending = true,
@@ -422,6 +458,7 @@ class PaginatedClientsParams {
           searchTerm == other.searchTerm &&
           _listEquals(tags, other.tags) &&
           company == other.company &&
+          jobTitle == other.jobTitle &&
           dateRange == other.dateRange &&
           sortBy == other.sortBy &&
           sortAscending == other.sortAscending;
@@ -433,6 +470,7 @@ class PaginatedClientsParams {
       searchTerm.hashCode ^ 
       (tags?.join(',').hashCode ?? 0) ^
       company.hashCode ^ 
+      jobTitle.hashCode ^
       dateRange.hashCode ^
       sortBy.hashCode ^
       sortAscending.hashCode;

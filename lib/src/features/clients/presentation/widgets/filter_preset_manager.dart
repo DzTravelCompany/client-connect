@@ -7,6 +7,7 @@ class FilterPresetManager extends ConsumerStatefulWidget {
   final String? currentSearchTerm;
   final List<String> currentTags;
   final String? currentCompany;
+  final String? currentJobTitle; // Added currentJobTitle parameter
   final DateTimeRange? currentDateRange;
   final String currentSortBy;
   final bool currentSortAscending;
@@ -17,6 +18,7 @@ class FilterPresetManager extends ConsumerStatefulWidget {
     this.currentSearchTerm,
     this.currentTags = const [],
     this.currentCompany,
+    this.currentJobTitle, // Added currentJobTitle parameter
     this.currentDateRange,
     this.currentSortBy = 'name',
     this.currentSortAscending = true,
@@ -158,6 +160,9 @@ class _FilterPresetManagerState extends ConsumerState<FilterPresetManager> {
     if (preset.company?.isNotEmpty == true) {
       details.add('Company: ${preset.company}');
     }
+    if (preset.jobTitle?.isNotEmpty == true) { // Added job title to preset details
+      details.add('Job Title: ${preset.jobTitle}');
+    }
     if (preset.dateRange != null) {
       details.add('Date Range');
     }
@@ -288,118 +293,50 @@ class _FilterPresetManagerState extends ConsumerState<FilterPresetManager> {
   }
 
   Future<void> _saveCurrentPreset() async {
-  if (_nameController.text.trim().isEmpty || _isSaving) return;
+    if (_nameController.text.trim().isEmpty || _isSaving) return;
 
-  setState(() {
-    _isSaving = true;
-  });
+    setState(() {
+      _isSaving = true;
+    });
 
-  final preset = ClientFilterPreset(
-    id: 0, // New preset
-    name: _nameController.text.trim(),
-    searchTerm: widget.currentSearchTerm,
-    tags: widget.currentTags,
-    company: widget.currentCompany,
-    dateRange: widget.currentDateRange,
-    sortBy: widget.currentSortBy,
-    sortAscending: widget.currentSortAscending,
-    createdAt: DateTime.now(),
-    updatedAt: DateTime.now(),
-  );
+    final preset = ClientFilterPreset(
+      id: 0, // New preset
+      name: _nameController.text.trim(),
+      searchTerm: widget.currentSearchTerm,
+      tags: widget.currentTags,
+      company: widget.currentCompany,
+      jobTitle: widget.currentJobTitle, // Include current job title in preset
+      dateRange: widget.currentDateRange,
+      sortBy: widget.currentSortBy,
+      sortAscending: widget.currentSortAscending,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
 
-  try {
-    await ref.read(clientFilterPresetNotifierProvider.notifier).savePreset(preset);
-    
-    if (mounted) {
-      // Clear the text field and reset saving state
-      _nameController.clear();
-      setState(() {
-        _isSaving = false;
-      });
-      
-      // Close dialog first and wait for it to complete
-      Navigator.of(context).pop();
-      
-      // Refresh presets list
-      ref.invalidate(clientFilterPresetsProvider);
-      
-      // Show success message using a post-frame callback to ensure dialog is fully closed
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          displayInfoBar(
-            context,
-            builder: (context, close) => InfoBar(
-              title: const Text('Success'),
-              content: const Text('Filter preset saved successfully'),
-              severity: InfoBarSeverity.success,
-              onClose: close,
-            ),
-          );
-        }
-      });
-    }
-  } catch (e) {
-    if (mounted) {
-      setState(() {
-        _isSaving = false;
-      });
-      
-      // Close dialog first and wait for it to complete
-      Navigator.of(context).pop();
-      
-      // Show error message using a post-frame callback
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          displayInfoBar(
-            context,
-            builder: (context, close) => InfoBar(
-              title: const Text('Error'),
-              content: Text('Failed to save preset: $e'),
-              severity: InfoBarSeverity.error,
-              onClose: close,
-            ),
-          );
-        }
-      });
-    }
-  }
-}
-
-  Future<void> _deletePreset(int presetId) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (context) => ContentDialog(
-      title: const Text('Delete Preset'),
-      content: const Text('Are you sure you want to delete this filter preset?'),
-      actions: [
-        Button(
-          child: const Text('Cancel'),
-          onPressed: () => Navigator.of(context).pop(false),
-        ),
-        FilledButton(
-          child: const Text('Delete'),
-          onPressed: () => Navigator.of(context).pop(true),
-        ),
-      ],
-    ),
-  );
-
-  if (confirmed == true && mounted) {
     try {
-      await ref.read(clientFilterPresetNotifierProvider.notifier).deletePreset(presetId);
+      await ref.read(clientFilterPresetNotifierProvider.notifier).savePreset(preset);
       
       if (mounted) {
+        // Clear the text field and reset saving state
+        _nameController.clear();
+        setState(() {
+          _isSaving = false;
+        });
+        
+        // Close dialog first and wait for it to complete
+        Navigator.of(context).pop();
+        
         // Refresh presets list
         ref.invalidate(clientFilterPresetsProvider);
         
-        // Show success message using post-frame callback
+        // Show success message using a post-frame callback to ensure dialog is fully closed
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             displayInfoBar(
               context,
               builder: (context, close) => InfoBar(
                 title: const Text('Success'),
-                content: const Text('Filter preset deleted successfully'),
+                content: const Text('Filter preset saved successfully'),
                 severity: InfoBarSeverity.success,
                 onClose: close,
               ),
@@ -409,14 +346,21 @@ class _FilterPresetManagerState extends ConsumerState<FilterPresetManager> {
       }
     } catch (e) {
       if (mounted) {
-        // Show error message using post-frame callback
+        setState(() {
+          _isSaving = false;
+        });
+        
+        // Close dialog first and wait for it to complete
+        Navigator.of(context).pop();
+        
+        // Show error message using a post-frame callback
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             displayInfoBar(
               context,
               builder: (context, close) => InfoBar(
                 title: const Text('Error'),
-                content: Text('Failed to delete preset: $e'),
+                content: Text('Failed to save preset: $e'),
                 severity: InfoBarSeverity.error,
                 onClose: close,
               ),
@@ -426,12 +370,75 @@ class _FilterPresetManagerState extends ConsumerState<FilterPresetManager> {
       }
     }
   }
-}
+
+  Future<void> _deletePreset(int presetId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: const Text('Delete Preset'),
+        content: const Text('Are you sure you want to delete this filter preset?'),
+        actions: [
+          Button(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          FilledButton(
+            child: const Text('Delete'),
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await ref.read(clientFilterPresetNotifierProvider.notifier).deletePreset(presetId);
+        
+        if (mounted) {
+          // Refresh presets list
+          ref.invalidate(clientFilterPresetsProvider);
+          
+          // Show success message using post-frame callback
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              displayInfoBar(
+                context,
+                builder: (context, close) => InfoBar(
+                  title: const Text('Success'),
+                  content: const Text('Filter preset deleted successfully'),
+                  severity: InfoBarSeverity.success,
+                  onClose: close,
+                ),
+              );
+            }
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          // Show error message using post-frame callback
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              displayInfoBar(
+                context,
+                builder: (context, close) => InfoBar(
+                  title: const Text('Error'),
+                  content: Text('Failed to delete preset: $e'),
+                  severity: InfoBarSeverity.error,
+                  onClose: close,
+                ),
+              );
+            }
+          });
+        }
+      }
+    }
+  }
 
   bool _hasCurrentFilters() {
     return widget.currentSearchTerm?.isNotEmpty == true ||
            widget.currentTags.isNotEmpty ||
            widget.currentCompany?.isNotEmpty == true ||
+           widget.currentJobTitle?.isNotEmpty == true || // Include job title in filter check
            widget.currentDateRange != null;
   }
 }

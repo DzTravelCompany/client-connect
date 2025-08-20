@@ -2,10 +2,11 @@ import 'package:client_connect/src/features/clients/logic/client_providers.dart'
 import 'package:client_connect/src/features/import_export/data/import_export_model.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/design_system/design_tokens.dart';
+import '../../../core/design_system/component_library.dart';
 import '../logic/import_export_providers.dart';
 import '../data/import_export_service.dart';
 import 'dart:io';
-
 
 class ImportWizardDialog extends ConsumerStatefulWidget {
   const ImportWizardDialog({super.key});
@@ -25,30 +26,50 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
     final importState = ref.watch(importStateProvider);
 
     return ContentDialog(
-      constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
-      title: const Text('Import Clients'),
+      constraints: const BoxConstraints(maxWidth: 700, maxHeight: 750),
+      title: Text(
+        'Import Clients',
+        style: DesignTextStyles.titleLarge,
+      ),
       content: Column(
         children: [
-          // Progress indicator
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey,
-              borderRadius: BorderRadius.circular(8),
-            ),
+          DesignSystemComponents.standardCard(
+            semanticLabel: 'Import wizard progress steps',
+            padding: const EdgeInsets.all(DesignTokens.space4),
             child: Row(
               children: [
                 _buildStepIndicator(0, 'Select File', _currentStep >= 0),
-                const Expanded(child: Divider()),
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    margin: const EdgeInsets.symmetric(horizontal: DesignTokens.space2),
+                    decoration: BoxDecoration(
+                      color: _currentStep >= 1 
+                          ? DesignTokens.semanticSuccess 
+                          : DesignTokens.borderSecondary,
+                      borderRadius: BorderRadius.circular(DesignTokens.radiusSmall),
+                    ),
+                  ),
+                ),
                 _buildStepIndicator(1, 'Configure', _currentStep >= 1),
-                const Expanded(child: Divider()),
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    margin: const EdgeInsets.symmetric(horizontal: DesignTokens.space2),
+                    decoration: BoxDecoration(
+                      color: _currentStep >= 2 
+                          ? DesignTokens.semanticSuccess 
+                          : DesignTokens.borderSecondary,
+                      borderRadius: BorderRadius.circular(DesignTokens.radiusSmall),
+                    ),
+                  ),
+                ),
                 _buildStepIndicator(2, 'Import', _currentStep >= 2),
               ],
             ),
           ),
           
-          const SizedBox(height: 24),
+          const SizedBox(height: DesignTokens.sectionSpacing),
           
           // Step content
           Expanded(
@@ -57,27 +78,34 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
         ],
       ),
       actions: [
-        Button(
-          child: const Text('Cancel'),
+        DesignSystemComponents.secondaryButton(
+          text: 'Cancel',
           onPressed: () {
             ref.read(importStateProvider.notifier).reset();
             Navigator.of(context).pop();
           },
+          semanticLabel: 'Cancel import process',
         ),
         if (_currentStep > 0 && !importState.isLoading)
-          Button(
-            child: const Text('Back'),
+          DesignSystemComponents.secondaryButton(
+            text: 'Back',
+            icon: FluentIcons.back,
             onPressed: () => setState(() => _currentStep--),
+            semanticLabel: 'Go back to previous step',
           ),
         if (_currentStep < 2 && _canProceed())
-          FilledButton(
-            child: const Text('Next'),
+          DesignSystemComponents.primaryButton(
+            text: 'Next',
+            icon: FluentIcons.forward,
             onPressed: () => setState(() => _currentStep++),
+            semanticLabel: 'Continue to next step',
           ),
         if (_currentStep == 2 && _selectedFilePath != null && !importState.isLoading)
-          FilledButton(
-            child: const Text('Start Import'),
+          DesignSystemComponents.primaryButton(
+            text: 'Start Import',
+            icon: FluentIcons.download,
             onPressed: () => _startImport(settings),
+            semanticLabel: 'Begin importing clients',
           ),
       ],
     );
@@ -87,30 +115,42 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
     return Column(
       children: [
         Container(
-          width: 32,
-          height: 32,
+          width: DesignTokens.iconSizeXLarge,
+          height: DesignTokens.iconSizeXLarge,
           decoration: BoxDecoration(
             color: isActive 
-                ? FluentTheme.of(context).accentColor 
-                : Colors.grey[60],
+                ? DesignTokens.semanticSuccess
+                : DesignTokens.semanticInfo,
             shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Text(
-              '${step + 1}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
+            border: Border.all(
+              color: isActive 
+                  ? DesignTokens.semanticSuccess
+                  : DesignTokens.borderSecondary,
+              width: 2,
             ),
           ),
+          child: Center(
+            child: isActive
+                ? Icon(
+                    FluentIcons.completed,
+                    color: DesignTokens.textAccent,
+                    size: DesignTokens.iconSizeSmall,
+                  )
+                : Text(
+                    '${step + 1}',
+                    style: DesignTextStyles.body.copyWith(
+                      color: isActive ? DesignTokens.textAccent : DesignTokens.textSecondary,
+                      fontWeight: DesignTokens.fontWeightMedium,
+                    ),
+                  ),
+          ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: DesignTokens.space2),
         Text(
           title,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          style: DesignTextStyles.caption.copyWith(
+            fontWeight: isActive ? DesignTokens.fontWeightMedium : DesignTokens.fontWeightRegular,
+            color: isActive ? DesignTokens.textPrimary : DesignTokens.textSecondary,
           ),
         ),
       ],
@@ -139,85 +179,97 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
           children: [
             Text(
               'Select Import File',
-              style: FluentTheme.of(context).typography.subtitle,
+              style: DesignTextStyles.subtitle,
             ),
-            const SizedBox(height: 8),
-            const Text('Choose a CSV, JSON, or Excel file containing your client data.'),
+            const SizedBox(height: DesignTokens.space2),
+            Text(
+              'Choose a CSV, JSON, or Excel file containing your client data.',
+              style: DesignTextStyles.body.copyWith(
+                color: DesignTokens.textSecondary,
+              ),
+            ),
             
-            const SizedBox(height: 24),
+            const SizedBox(height: DesignTokens.sectionSpacing),
             
-            // File selection area
             Container(
               width: double.infinity,
               height: 200,
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: _selectedFilePath != null ? Colors.green : Colors.grey,
-                  style: BorderStyle.solid,
+                  color: _selectedFilePath != null 
+                      ? DesignTokens.semanticSuccess 
+                      : DesignTokens.borderSecondary,
                   width: 2,
                 ),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
                 color: _selectedFilePath != null 
-                    ? Colors.green.withValues(alpha: 0.05)
-                    : Colors.grey,
+                    ? DesignTokens.withOpacity(DesignTokens.semanticSuccess, 0.05)
+                    : DesignTokens.withOpacity(DesignTokens.semanticInfo, 0.05),
               ),
               child: _selectedFilePath != null
                   ? _buildSelectedFileInfo()
                   : _buildFileDropArea(),
             ),
             
-            const SizedBox(height: 16),
+            const SizedBox(height: DesignTokens.space4),
             
-            // Browse button
             Row(
               children: [
-                FilledButton(
+                DesignSystemComponents.primaryButton(
+                  text: 'Browse Files',
+                  icon: FluentIcons.folder_open,
                   onPressed: _selectFile,
-                  child: const Text('Browse Files'),
+                  semanticLabel: 'Browse and select import file',
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: DesignTokens.space3),
                 if (_selectedFilePath != null)
-                  Button(
+                  DesignSystemComponents.secondaryButton(
+                    text: 'Clear Selection',
+                    icon: FluentIcons.clear,
                     onPressed: () => setState(() {
                       _selectedFilePath = null;
                       _selectedFileName = null;
                     }),
-                    child: const Text('Clear Selection'),
+                    semanticLabel: 'Clear selected file',
                   ),
               ],
             ),
             
-            const SizedBox(height: 24),
+            const SizedBox(height: DesignTokens.sectionSpacing),
             
-            // Supported formats
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.blue.withValues(alpha: 0.1)),
-              ),
+            DesignSystemComponents.standardCard(
+              semanticLabel: 'Supported file formats information',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(FluentIcons.info, size: 16, color: Colors.blue),
-                      const SizedBox(width: 8),
+                      Icon(
+                        FluentIcons.info,
+                        size: DesignTokens.iconSizeSmall,
+                        color: DesignTokens.semanticInfo,
+                      ),
+                      const SizedBox(width: DesignTokens.space2),
                       Text(
                         'Supported File Formats',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                        style: DesignTextStyles.body.copyWith(
+                          fontWeight: DesignTokens.fontWeightMedium,
+                          color: DesignTokens.semanticInfo,
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  const Text('• CSV (.csv) - Comma-separated values'),
-                  const Text('• JSON (.json) - JavaScript Object Notation'),
-                  const Text('• Excel (.xlsx) - Microsoft Excel format'),
-                  const SizedBox(height: 8),
-                  const Text(
+                  const SizedBox(height: DesignTokens.space3),
+                  _buildFormatItem('CSV (.csv)', 'Comma-separated values'),
+                  _buildFormatItem('JSON (.json)', 'JavaScript Object Notation'),
+                  _buildFormatItem('Excel (.xlsx)', 'Microsoft Excel format'),
+                  const SizedBox(height: DesignTokens.space3),
+                  Text(
                     'Maximum file size: 50MB',
-                    style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                    style: DesignTextStyles.caption.copyWith(
+                      fontStyle: FontStyle.italic,
+                      color: DesignTokens.textTertiary,
+                    ),
                   ),
                 ],
               ),
@@ -228,36 +280,69 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
     );
   }
 
+  Widget _buildFormatItem(String format, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: DesignTokens.space2),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: DesignTokens.semanticInfo,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: DesignTokens.space2),
+          Text(
+            format,
+            style: DesignTextStyles.body.copyWith(
+              fontWeight: DesignTokens.fontWeightMedium,
+            ),
+          ),
+          const SizedBox(width: DesignTokens.space2),
+          Text(
+            '- $description',
+            style: DesignTextStyles.body.copyWith(
+              color: DesignTokens.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSelectedFileInfo() {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(DesignTokens.space4),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             FluentIcons.completed,
-            size: 48,
-            color: Colors.green,
+            size: DesignTokens.iconSizeXLarge,
+            color: DesignTokens.semanticSuccess,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: DesignTokens.space4),
           Text(
             'File Selected',
-            style: FluentTheme.of(context).typography.subtitle?.copyWith(
-              color: Colors.green,
+            style: DesignTextStyles.subtitle.copyWith(
+              color: DesignTokens.semanticSuccess,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: DesignTokens.space2),
           Text(
             _selectedFileName ?? 'Unknown file',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: DesignTextStyles.body.copyWith(
+              fontWeight: DesignTokens.fontWeightMedium,
+            ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: DesignTokens.space1),
           Text(
             _selectedFilePath ?? '',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[100],
+            style: DesignTextStyles.caption.copyWith(
+              color: DesignTokens.textSecondary,
             ),
             textAlign: TextAlign.center,
             maxLines: 2,
@@ -274,18 +359,20 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
       children: [
         Icon(
           FluentIcons.cloud_upload,
-          size: 48,
-          color: Colors.grey[100],
+          size: DesignTokens.iconSizeXLarge,
+          color: DesignTokens.textTertiary,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: DesignTokens.space4),
         Text(
           'Select a file to import',
-          style: FluentTheme.of(context).typography.subtitle,
+          style: DesignTextStyles.subtitle,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: DesignTokens.space2),
         Text(
           'Click "Browse Files" to select your import file',
-          style: TextStyle(color: Colors.grey[100]),
+          style: DesignTextStyles.body.copyWith(
+            color: DesignTokens.textSecondary,
+          ),
           textAlign: TextAlign.center,
         ),
       ],
@@ -301,152 +388,169 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
           children: [
             Text(
               'Import Configuration',
-              style: FluentTheme.of(context).typography.subtitle,
+              style: DesignTextStyles.subtitle,
             ),
-            const SizedBox(height: 8),
-            const Text('Configure how your data should be imported.'),
-            
-            const SizedBox(height: 24),
-            
-            // Format selection
-            Text('File Format', style: FluentTheme.of(context).typography.body),
-            const SizedBox(height: 8),
-            ComboBox<ImportExportFormat>(
-              value: settings.format,
-              items: const [
-                ComboBoxItem(
-                  value: ImportExportFormat.csv,
-                  child: Text('CSV (Comma-Separated Values)'),
-                ),
-                ComboBoxItem(
-                  value: ImportExportFormat.json,
-                  child: Text('JSON (JavaScript Object Notation)'),
-                ),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  ref.read(importExportSettingsProvider.notifier).updateFormat(value);
-                }
-              },
+            const SizedBox(height: DesignTokens.space2),
+            Text(
+              'Configure how your data should be imported.',
+              style: DesignTextStyles.body.copyWith(
+                color: DesignTokens.textSecondary,
+              ),
             ),
             
-            const SizedBox(height: 16),
+            const SizedBox(height: DesignTokens.sectionSpacing),
             
-            // CSV-specific settings
-            if (settings.format == ImportExportFormat.csv) ...[
-              Text('CSV Delimiter', style: FluentTheme.of(context).typography.body),
-              const SizedBox(height: 8),
-              ComboBox<String>(
-                value: settings.delimiter,
-                items: const [
-                  ComboBoxItem(value: ',', child: Text('Comma (,)')),
-                  ComboBoxItem(value: ';', child: Text('Semicolon (;)')),
-                  ComboBoxItem(value: '\t', child: Text('Tab')),
+            DesignSystemComponents.standardCard(
+              semanticLabel: 'Import configuration options',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'File Format',
+                    style: DesignTextStyles.body.copyWith(
+                      fontWeight: DesignTokens.fontWeightMedium,
+                    ),
+                  ),
+                  const SizedBox(height: DesignTokens.space2),
+                  ComboBox<ImportExportFormat>(
+                    value: settings.format,
+                    items: const [
+                      ComboBoxItem(
+                        value: ImportExportFormat.csv,
+                        child: Text('CSV (Comma-Separated Values)'),
+                      ),
+                      ComboBoxItem(
+                        value: ImportExportFormat.json,
+                        child: Text('JSON (JavaScript Object Notation)'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        ref.read(importExportSettingsProvider.notifier).updateFormat(value);
+                      }
+                    },
+                  ),
+                  
+                  if (settings.format == ImportExportFormat.csv) ...[
+                    const SizedBox(height: DesignTokens.space4),
+                    Text(
+                      'CSV Delimiter',
+                      style: DesignTextStyles.body.copyWith(
+                        fontWeight: DesignTokens.fontWeightMedium,
+                      ),
+                    ),
+                    const SizedBox(height: DesignTokens.space2),
+                    ComboBox<String>(
+                      value: settings.delimiter,
+                      items: const [
+                        ComboBoxItem(value: ',', child: Text('Comma (,)')),
+                        ComboBoxItem(value: ';', child: Text('Semicolon (;)')),
+                        ComboBoxItem(value: '\t', child: Text('Tab')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          ref.read(importExportSettingsProvider.notifier).updateDelimiter(value);
+                        }
+                      },
+                    ),
+                  ],
+                  
+                  const SizedBox(height: DesignTokens.sectionSpacing),
+                  
+                  _buildCheckboxOption(
+                    'File includes header row',
+                    settings.includeHeaders,
+                    (value) => ref.read(importExportSettingsProvider.notifier).updateIncludeHeaders(value ?? true),
+                  ),
+                  _buildCheckboxOption(
+                    'Skip empty rows',
+                    settings.skipEmptyRows,
+                    (value) => ref.read(importExportSettingsProvider.notifier).updateSkipEmptyRows(value ?? true),
+                  ),
+                  _buildCheckboxOption(
+                    'Validate email addresses',
+                    settings.validateEmails,
+                    (value) => ref.read(importExportSettingsProvider.notifier).updateValidateEmails(value ?? true),
+                  ),
+                  _buildCheckboxOption(
+                    'Allow duplicate clients',
+                    settings.allowDuplicates,
+                    (value) => ref.read(importExportSettingsProvider.notifier).updateAllowDuplicates(value ?? false),
+                  ),
                 ],
-                onChanged: (value) {
-                  if (value != null) {
-                    ref.read(importExportSettingsProvider.notifier).updateDelimiter(value);
-                  }
-                },
               ),
-              const SizedBox(height: 16),
-            ],
-            
-            // General settings
-            Row(
-              children: [
-                Checkbox(
-                  checked: settings.includeHeaders,
-                  onChanged: (value) {
-                    ref.read(importExportSettingsProvider.notifier).updateIncludeHeaders(value ?? true);
-                  },
-                ),
-                const SizedBox(width: 8),
-                const Text('File includes header row'),
-              ],
             ),
             
-            const SizedBox(height: 8),
+            const SizedBox(height: DesignTokens.sectionSpacing),
             
-            Row(
-              children: [
-                Checkbox(
-                  checked: settings.skipEmptyRows,
-                  onChanged: (value) {
-                    ref.read(importExportSettingsProvider.notifier).updateSkipEmptyRows(value ?? true);
-                  },
-                ),
-                const SizedBox(width: 8),
-                const Text('Skip empty rows'),
-              ],
-            ),
-            
-            const SizedBox(height: 8),
-            
-            Row(
-              children: [
-                Checkbox(
-                  checked: settings.validateEmails,
-                  onChanged: (value) {
-                    ref.read(importExportSettingsProvider.notifier).updateValidateEmails(value ?? true);
-                  },
-                ),
-                const SizedBox(width: 8),
-                const Text('Validate email addresses'),
-              ],
-            ),
-            
-            const SizedBox(height: 8),
-            
-            Row(
-              children: [
-                Checkbox(
-                  checked: settings.allowDuplicates,
-                  onChanged: (value) {
-                    ref.read(importExportSettingsProvider.notifier).updateAllowDuplicates(value ?? false);
-                  },
-                ),
-                const SizedBox(width: 8),
-                const Text('Allow duplicate clients'),
-              ],
-            ),
-            
-            const SizedBox(height: 24),
-            
-            // Expected columns info
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-              ),
+            DesignSystemComponents.standardCard(
+              semanticLabel: 'Expected column headers information',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(FluentIcons.info, size: 16, color: Colors.orange),
-                      const SizedBox(width: 8),
+                      Icon(
+                        FluentIcons.info,
+                        size: DesignTokens.iconSizeSmall,
+                        color: DesignTokens.semanticWarning,
+                      ),
+                      const SizedBox(width: DesignTokens.space2),
                       Text(
                         'Expected Column Headers',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                        style: DesignTextStyles.body.copyWith(
+                          fontWeight: DesignTokens.fontWeightMedium,
+                          color: DesignTokens.semanticWarning,
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  const Text('Required: First Name, Last Name'),
-                  const Text('Optional: Email, Phone, Company, Job Title, Address, Notes'),
-                  const SizedBox(height: 8),
-                  const Text(
+                  const SizedBox(height: DesignTokens.space3),
+                  Text(
+                    'Required: First Name, Last Name',
+                    style: DesignTextStyles.body.copyWith(
+                      fontWeight: DesignTokens.fontWeightMedium,
+                    ),
+                  ),
+                  const SizedBox(height: DesignTokens.space1),
+                  Text(
+                    'Optional: Email, Phone, Company, Job Title, Address, Notes',
+                    style: DesignTextStyles.body,
+                  ),
+                  const SizedBox(height: DesignTokens.space3),
+                  Text(
                     'Column names are case-insensitive and spaces/underscores are ignored.',
-                    style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                    style: DesignTextStyles.caption.copyWith(
+                      fontStyle: FontStyle.italic,
+                      color: DesignTokens.textTertiary,
+                    ),
                   ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCheckboxOption(String label, bool value, Function(bool?) onChanged) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: DesignTokens.space3),
+      child: Row(
+        children: [
+          Checkbox(
+            checked: value,
+            onChanged: onChanged,
+          ),
+          const SizedBox(width: DesignTokens.space2),
+          Expanded(
+            child: Text(
+              label,
+              style: DesignTextStyles.body,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -460,32 +564,30 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
           children: [
             Text(
               'Import Summary',
-              style: FluentTheme.of(context).typography.subtitle,
+              style: DesignTextStyles.subtitle,
             ),
-            const SizedBox(height: 8),
-            const Text('Review your import settings and start the import process.'),
-            
-            const SizedBox(height: 24),
-            
-            // Import summary
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey),
+            const SizedBox(height: DesignTokens.space2),
+            Text(
+              'Review your import settings and start the import process.',
+              style: DesignTextStyles.body.copyWith(
+                color: DesignTokens.textSecondary,
               ),
+            ),
+            
+            const SizedBox(height: DesignTokens.sectionSpacing),
+            
+            DesignSystemComponents.standardCard(
+              semanticLabel: 'Import configuration summary',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Import Details',
-                    style: FluentTheme.of(context).typography.body?.copyWith(
-                      fontWeight: FontWeight.bold,
+                    style: DesignTextStyles.body.copyWith(
+                      fontWeight: DesignTokens.fontWeightMedium,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: DesignTokens.space3),
                   _buildSummaryRow('File', _selectedFileName ?? 'Unknown'),
                   _buildSummaryRow('Format', ref.read(importExportSettingsProvider).format.name.toUpperCase()),
                   _buildSummaryRow('Headers', ref.read(importExportSettingsProvider).includeHeaders ? 'Included' : 'Not included'),
@@ -495,70 +597,60 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
               ),
             ),
             
-            const SizedBox(height: 24),
+            const SizedBox(height: DesignTokens.sectionSpacing),
             
-            // Import progress
             if (importState.isLoading) ...[
-              Text(
-                'Import Progress',
-                style: FluentTheme.of(context).typography.body?.copyWith(
-                  fontWeight: FontWeight.bold,
+              DesignSystemComponents.standardCard(
+                semanticLabel: 'Import progress information',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Import Progress',
+                      style: DesignTextStyles.body.copyWith(
+                        fontWeight: DesignTokens.fontWeightMedium,
+                      ),
+                    ),
+                    const SizedBox(height: DesignTokens.space3),
+                    
+                    if (importState.progress != null) ...[
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: DesignTokens.iconSizeSmall,
+                            height: DesignTokens.iconSizeSmall,
+                            child: const ProgressRing(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: DesignTokens.space2),
+                          Text(
+                            importState.progress!.currentOperation,
+                            style: DesignTextStyles.body,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: DesignTokens.space2),
+                      ProgressBar(
+                        value: importState.progress!.progressPercentage * 100,
+                      ),
+                      const SizedBox(height: DesignTokens.space1),
+                      Text(
+                        '${importState.progress!.processedRecords} of ${importState.progress!.totalRecords} records processed',
+                        style: DesignTextStyles.caption,
+                      ),
+                    ] else ...[
+                      DesignSystemComponents.loadingIndicator(
+                        message: 'Preparing import...',
+                        size: DesignTokens.iconSizeSmall,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              
-              if (importState.progress != null) ...[
-                Row(
-                  children: [
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: ProgressRing(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(importState.progress!.currentOperation),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ProgressBar(
-                  value: importState.progress!.progressPercentage * 100,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${importState.progress!.processedRecords} of ${importState.progress!.totalRecords} records processed',
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ] else ...[
-                const Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: ProgressRing(strokeWidth: 2),
-                    ),
-                    SizedBox(width: 8),
-                    Text('Preparing import...'),
-                  ],
-                ),
-              ],
             ],
             
-            // Import result
             if (importState.result != null) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: importState.result!.hasErrors 
-                      ? Colors.orange.withValues(alpha: 0.1)
-                      : Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: importState.result!.hasErrors 
-                        ? Colors.orange.withValues(alpha: 0.3)
-                        : Colors.green.withValues(alpha: 0.3),
-                  ),
-                ),
+              DesignSystemComponents.standardCard(
+                semanticLabel: 'Import completion results',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -568,29 +660,35 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
                           importState.result!.hasErrors 
                               ? FluentIcons.warning 
                               : FluentIcons.completed,
-                          size: 20,
-                          color: importState.result!.hasErrors ? Colors.orange : Colors.green,
+                          size: DesignTokens.iconSizeMedium,
+                          color: importState.result!.hasErrors 
+                              ? DesignTokens.semanticWarning 
+                              : DesignTokens.semanticSuccess,
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: DesignTokens.space2),
                         Text(
                           'Import Completed',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: importState.result!.hasErrors ? Colors.orange : Colors.green,
+                          style: DesignTextStyles.body.copyWith(
+                            fontWeight: DesignTokens.fontWeightMedium,
+                            color: importState.result!.hasErrors 
+                                ? DesignTokens.semanticWarning 
+                                : DesignTokens.semanticSuccess,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text('Total records: ${importState.result!.totalRecords}'),
-                    Text('Successful: ${importState.result!.successfulImports}'),
-                    Text('Failed: ${importState.result!.failedImports}'),
-                    Text('Processing time: ${importState.result!.processingTime.inSeconds}s'),
+                    const SizedBox(height: DesignTokens.space3),
+                    _buildSummaryRow('Total records', '${importState.result!.totalRecords}'),
+                    _buildSummaryRow('Successful', '${importState.result!.successfulImports}'),
+                    _buildSummaryRow('Failed', '${importState.result!.failedImports}'),
+                    _buildSummaryRow('Processing time', '${importState.result!.processingTime.inSeconds}s'),
                     if (importState.result!.hasErrors) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: DesignTokens.space2),
                       Text(
                         '${importState.result!.errors.length} errors occurred during import.',
-                        style: TextStyle(color: Colors.orange),
+                        style: DesignTextStyles.body.copyWith(
+                          color: DesignTokens.semanticWarning,
+                        ),
                       ),
                     ],
                   ],
@@ -598,32 +696,34 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
               ),
             ],
             
-            // Error message
             if (importState.error != null)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
+              DesignSystemComponents.standardCard(
+                semanticLabel: 'Import error information',
                 child: Row(
                   children: [
-                    Icon(FluentIcons.error, size: 20, color: Colors.red),
-                    const SizedBox(width: 8),
+                    Icon(
+                      FluentIcons.error,
+                      size: DesignTokens.iconSizeMedium,
+                      color: DesignTokens.semanticError,
+                    ),
+                    const SizedBox(width: DesignTokens.space2),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             'Import Failed',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                            style: DesignTextStyles.body.copyWith(
+                              fontWeight: DesignTokens.fontWeightMedium,
+                              color: DesignTokens.semanticError,
+                            ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: DesignTokens.space1),
                           Text(
                             importState.error!,
-                            style: TextStyle(color: Colors.red),
+                            style: DesignTextStyles.body.copyWith(
+                              color: DesignTokens.semanticError,
+                            ),
                           ),
                         ],
                       ),
@@ -639,17 +739,24 @@ class _ImportWizardDialogState extends ConsumerState<ImportWizardDialog> {
 
   Widget _buildSummaryRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: DesignTokens.space2),
       child: Row(
         children: [
           SizedBox(
-            width: 80,
+            width: 100,
             child: Text(
               '$label:',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: DesignTextStyles.body.copyWith(
+                fontWeight: DesignTokens.fontWeightMedium,
+              ),
             ),
           ),
-          Expanded(child: Text(value)),
+          Expanded(
+            child: Text(
+              value,
+              style: DesignTextStyles.body,
+            ),
+          ),
         ],
       ),
     );

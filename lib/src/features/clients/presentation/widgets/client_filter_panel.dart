@@ -13,10 +13,12 @@ class ClientFilterPanel extends ConsumerStatefulWidget {
   final Function(String) onSearchChanged;
   final List<String> selectedTags;
   final String? selectedCompany;
+  final String? selectedJobTitle; // Added selectedJobTitle parameter
   final DateTimeRange? dateRange;
   final Function({
     List<String>? tags,
     String? company,
+    String? jobTitle, // Added jobTitle parameter
     DateTimeRange? dateRange,
   }) onFilterChanged;
   final VoidCallback onClearFilters;
@@ -27,6 +29,7 @@ class ClientFilterPanel extends ConsumerStatefulWidget {
     required this.onSearchChanged,
     required this.selectedTags,
     required this.selectedCompany,
+    required this.selectedJobTitle, // Added selectedJobTitle parameter
     required this.dateRange,
     required this.onFilterChanged,
     required this.onClearFilters,
@@ -39,6 +42,7 @@ class ClientFilterPanel extends ConsumerStatefulWidget {
 class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
   bool _isTagsExpanded = true;
   bool _isCompanyExpanded = true;
+  bool _isJobTitleExpanded = true; // Added job title expansion state
   bool _isDateExpanded = false;
   bool _isPresetExpanded = false;
 
@@ -46,6 +50,7 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
   Widget build(BuildContext context) {
     final tagsAsync = ref.watch(allTagsProvider);
     final companiesAsync = ref.watch(clientCompaniesProvider);
+    final jobTitlesAsync = ref.watch(clientJobTitlesProvider); // Added job titles provider watch
 
     return Container(
       padding: EdgeInsets.all(DesignTokens.space4),
@@ -157,6 +162,24 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
                         error: (_, __) => DesignSystemComponents.emptyState(
                           title: 'Error loading companies',
                           message: 'Could not load company list',
+                          icon: FluentIcons.error,
+                          iconColor: DesignTokens.semanticError,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: DesignTokens.space4),
+                    
+                    // Job Title Filter
+                    _buildFilterSection(
+                      title: 'Job Title',
+                      isExpanded: _isJobTitleExpanded,
+                      onToggle: () => setState(() => _isJobTitleExpanded = !_isJobTitleExpanded),
+                      child: jobTitlesAsync.when(
+                        data: (jobTitles) => _buildJobTitleFilter(jobTitles),
+                        loading: () => DesignSystemComponents.skeletonLoader(height: 120),
+                        error: (_, __) => DesignSystemComponents.emptyState(
+                          title: 'Error loading job titles',
+                          message: 'Could not load job title list',
                           icon: FluentIcons.error,
                           iconColor: DesignTokens.semanticError,
                         ),
@@ -370,6 +393,52 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
     );
   }
 
+  Widget _buildJobTitleFilter(List<String> jobTitles) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (jobTitles.isEmpty)
+          DesignSystemComponents.emptyState(
+            title: 'No job titles found',
+            message: 'No job title data available',
+            icon: FluentIcons.add_work,
+          )
+        else
+          Column(
+            children: jobTitles.take(10).map((jobTitle) {
+              final isSelected = widget.selectedJobTitle == jobTitle;
+              return Container(
+                width: double.infinity,
+                margin: EdgeInsets.only(bottom: DesignTokens.space1),
+                child: RadioButton(
+                  checked: isSelected,
+                  onChanged: (checked) {
+                    widget.onFilterChanged(
+                      jobTitle: checked == true ? jobTitle : null,
+                    );
+                  },
+                  content: Text(
+                    jobTitle,
+                    style: DesignTextStyles.body,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        if (jobTitles.length > 10)
+          Padding(
+            padding: EdgeInsets.only(top: DesignTokens.space2),
+            child: Text(
+              '... and ${jobTitles.length - 10} more',
+              style: DesignTextStyles.caption.copyWith(
+                color: DesignTokens.textSecondary,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildDateRangeFilter() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -446,6 +515,7 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
         currentSearchTerm: widget.searchController.text,
         currentTags: widget.selectedTags,
         currentCompany: widget.selectedCompany,
+        currentJobTitle: widget.selectedJobTitle, // Pass current job title
         currentDateRange: widget.dateRange,
         currentSortBy: 'name',
         currentSortAscending: true,
@@ -454,6 +524,7 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
           widget.onFilterChanged(
             tags: preset.tags,
             company: preset.company,
+            jobTitle: preset.jobTitle, // Apply job title from preset
             dateRange: preset.dateRange,
           );
           widget.onSearchChanged(preset.searchTerm ?? '');
@@ -489,6 +560,9 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
     }
     if (widget.selectedCompany != null) {
       activeFilters.add('Company: ${widget.selectedCompany}');
+    }
+    if (widget.selectedJobTitle != null) { // Added job title to active filters summary
+      activeFilters.add('Job Title: ${widget.selectedJobTitle}');
     }
     if (widget.dateRange != null) {
       activeFilters.add('Date Range');
@@ -535,6 +609,7 @@ class _ClientFilterPanelState extends ConsumerState<ClientFilterPanel> {
     return widget.searchController.text.isNotEmpty ||
            widget.selectedTags.isNotEmpty ||
            widget.selectedCompany != null ||
+           widget.selectedJobTitle != null || // Include job title in active filters check
            widget.dateRange != null;
   }
 }

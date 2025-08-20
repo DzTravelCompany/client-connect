@@ -62,16 +62,16 @@ class _MainShellState extends ConsumerState<MainShell> {
                           ),
                           
                           // Detail panel (if visible)
-                          if (detailPanelState.isVisible) ...[
-                            Container(
-                              width: 1,
-                              color: DesignTokens.borderPrimary,
-                            ),
-                            Expanded(
-                              flex: 1,
-                              child: _buildDetailPanel(context, ref, detailPanelState),
-                            ),
-                          ],
+                          // if (detailPanelState.isVisible) ...[
+                          //   Container(
+                          //     width: 1,
+                          //     color: DesignTokens.borderPrimary,
+                          //   ),
+                          //   Expanded(
+                          //     flex: 1,
+                          //     child: _buildDetailPanel(context, ref, detailPanelState),
+                          //   ),
+                          // ],
                         ],
                       ),
                     ),
@@ -95,7 +95,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     switch (state.type) {
       case DetailPanelType.client:
-        return _buildClientDetailPanel(context, ref, state.selectedItemId!);
+        return const SizedBox.shrink();
       case DetailPanelType.campaign:
         return _buildCampaignDetailPanel(context, ref, state.selectedItemId!);
       case DetailPanelType.template:

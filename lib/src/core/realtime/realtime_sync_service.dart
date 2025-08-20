@@ -421,6 +421,25 @@ class RealtimeSyncService {
   /// Invalidate campaign-related providers
   void _invalidateCampaignProviders(int? campaignId) {
     logger.d('Invalidating campaign providers${campaignId != null ? ' for campaign $campaignId' : ''}');
+    
+    if (_providerContainer != null) {
+      Future.microtask(() {
+        // Invalidate general campaign providers
+        _providerContainer!.invalidate(allCampaignsProvider);
+        _providerContainer!.invalidate(campaignHealthProvider);
+        _providerContainer!.invalidate(dashboardMetricsProvider);
+        _providerContainer!.invalidate(dashboardActivityProvider);
+        
+        // Invalidate specific campaign providers if campaignId is provided
+        if (campaignId != null) {
+          _providerContainer!.invalidate(campaignByIdProvider(campaignId));
+          _providerContainer!.invalidate(campaignStatusStreamProvider(campaignId));
+          _providerContainer!.invalidate(campaignMessageLogsProvider(campaignId));
+          _providerContainer!.invalidate(campaignMetricsProvider(campaignId));
+          _providerContainer!.invalidate(realTimeMessageLogsProvider(campaignId));
+        }
+      });
+    }
   }
 
   /// Invalidate template-related providers

@@ -1,6 +1,8 @@
 import 'package:client_connect/constants.dart';
 import 'package:client_connect/src/features/import_export/data/import_export_model.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import '../../../core/design_system/design_tokens.dart';
+import '../../../core/design_system/component_library.dart';
 import 'dart:io';
 
 class ExportResultDialog extends StatelessWidget {
@@ -11,98 +13,91 @@ class ExportResultDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ContentDialog(
-      constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
-      title: const Text('Export Results'),
+      constraints: const BoxConstraints(maxWidth: 650, maxHeight: 550),
+      title: Text(
+        'Export Results',
+        style: DesignTextStyles.titleLarge,
+      ),
       content: Column(
         children: [
-          // Success indicator
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-            ),
+          DesignSystemComponents.standardCard(
+            semanticLabel: 'Export completion confirmation',
             child: Column(
               children: [
                 Icon(
                   FluentIcons.completed,
-                  size: 48,
-                  color: Colors.green,
+                  size: DesignTokens.iconSizeXLarge,
+                  color: DesignTokens.semanticSuccess,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: DesignTokens.space4),
                 Text(
                   'Export Completed Successfully',
-                  style: FluentTheme.of(context).typography.subtitle?.copyWith(
-                    color: Colors.green,
+                  style: DesignTextStyles.subtitle.copyWith(
+                    color: DesignTokens.semanticSuccess,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text('${result.totalRecords} clients exported'),
+                const SizedBox(height: DesignTokens.space2),
+                DesignSystemComponents.statusBadge(
+                  text: '${result.totalRecords} clients exported',
+                  type: SemanticColorType.success,
+                  icon: FluentIcons.people,
+                ),
               ],
             ),
           ),
           
-          const SizedBox(height: 24),
+          const SizedBox(height: DesignTokens.sectionSpacing),
           
-          // Export details
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey[10],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey[40]),
-            ),
+          DesignSystemComponents.standardCard(
+            semanticLabel: 'Export operation details',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Export Details',
-                  style: FluentTheme.of(context).typography.body?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    Icon(
+                      FluentIcons.info,
+                      size: DesignTokens.iconSizeSmall,
+                      color: DesignTokens.semanticInfo,
+                    ),
+                    const SizedBox(width: DesignTokens.space2),
+                    Text(
+                      'Export Details',
+                      style: DesignTextStyles.body.copyWith(
+                        fontWeight: DesignTokens.fontWeightMedium,
+                        color: DesignTokens.semanticInfo,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                _buildDetailRow('Records Exported', '${result.totalRecords}'),
-                _buildDetailRow('File Size', result.fileSizeFormatted),
-                _buildDetailRow('Processing Time', '${result.processingTime.inSeconds} seconds'),
-                _buildDetailRow('File Location', result.filePath),
+                const SizedBox(height: DesignTokens.space3),
+                _buildDetailRow('Records Exported', '${result.totalRecords}', FluentIcons.number_field),
+                _buildDetailRow('File Size', result.fileSizeFormatted, FluentIcons.hard_drive),
+                _buildDetailRow('Processing Time', '${result.processingTime.inSeconds} seconds', FluentIcons.timer),
+                _buildDetailRow('File Location', result.filePath, FluentIcons.folder, isPath: true),
               ],
             ),
           ),
           
-          const SizedBox(height: 24),
+          const SizedBox(height: DesignTokens.sectionSpacing),
           
-          // File actions
           Row(
             children: [
               Expanded(
-                child: FilledButton(
+                child: DesignSystemComponents.primaryButton(
+                  text: 'Open File Location',
+                  icon: FluentIcons.folder_open,
                   onPressed: () => _openFileLocation(result.filePath),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(FluentIcons.folder_open, size: 16),
-                      SizedBox(width: 8),
-                      Text('Open File Location'),
-                    ],
-                  ),
+                  semanticLabel: 'Open file location in explorer',
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: DesignTokens.space3),
               Expanded(
-                child: Button(
+                child: DesignSystemComponents.secondaryButton(
+                  text: 'Open File',
+                  icon: FluentIcons.open_file,
                   onPressed: () => _openFile(result.filePath),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(FluentIcons.open_file, size: 16),
-                      SizedBox(width: 8),
-                      Text('Open File'),
-                    ],
-                  ),
+                  semanticLabel: 'Open exported file',
                 ),
               ),
             ],
@@ -110,31 +105,45 @@ class ExportResultDialog extends StatelessWidget {
         ],
       ),
       actions: [
-        Button(
-          child: const Text('Close'),
+        DesignSystemComponents.secondaryButton(
+          text: 'Close',
           onPressed: () => Navigator.of(context).pop(),
+          semanticLabel: 'Close export results dialog',
         ),
       ],
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(String label, String value, IconData icon, {bool isPath = false}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: DesignTokens.space3),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Icon(
+            icon,
+            size: DesignTokens.iconSizeSmall,
+            color: DesignTokens.textSecondary,
+          ),
+          const SizedBox(width: DesignTokens.space2),
           SizedBox(
             width: 120,
             child: Text(
               '$label:',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: DesignTextStyles.body.copyWith(
+                fontWeight: DesignTokens.fontWeightMedium,
+              ),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 14),
+              style: DesignTextStyles.body.copyWith(
+                color: isPath ? DesignTokens.textSecondary : DesignTokens.textPrimary,
+                fontFamily: isPath ? 'monospace' : null,
+              ),
+              maxLines: isPath ? 2 : 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

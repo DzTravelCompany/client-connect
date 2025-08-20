@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../logic/campaign_providers.dart';
 import '../../data/campaigns_model.dart';
 import 'campaign_status_badge.dart';
-import 'campaign_progress_indicator.dart';
 import 'campaign_metrics_card.dart';
 import '../../../templates/logic/template_providers.dart';
 import '../../../clients/logic/client_providers.dart';
@@ -177,15 +176,6 @@ class CampaignDetailsPanel extends ConsumerWidget {
             campaignId: campaign.id,
             showDetailedMetrics: true,
             showHealthIndicator: true,
-          ),
-        
-        const SizedBox(height: 16),
-        
-        // Progress (if applicable)
-        if (campaign.isInProgress || campaign.isCompleted)
-          CampaignProgressIndicator(
-            campaign: campaign,
-            showStats: true,
           ),
         
         const SizedBox(height: 16),

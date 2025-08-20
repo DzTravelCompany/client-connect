@@ -93,6 +93,51 @@ class DetailPanelStateNotifier extends StateNotifier<DetailPanelState> {
   }
 }
 
+// Filter panel state provider for toggling visibility
+final filterPanelStateProvider = StateNotifierProvider<FilterPanelStateNotifier, FilterPanelState>((ref) {
+  return FilterPanelStateNotifier();
+});
+
+class FilterPanelState {
+  final bool isVisible;
+  final double width;
+  
+  const FilterPanelState({
+    this.isVisible = true,
+    this.width = 320.0,
+  });
+  
+  FilterPanelState copyWith({
+    bool? isVisible,
+    double? width,
+  }) {
+    return FilterPanelState(
+      isVisible: isVisible ?? this.isVisible,
+      width: width ?? this.width,
+    );
+  }
+}
+
+class FilterPanelStateNotifier extends StateNotifier<FilterPanelState> {
+  FilterPanelStateNotifier() : super(const FilterPanelState());
+  
+  void toggleVisibility() {
+    state = state.copyWith(isVisible: !state.isVisible);
+  }
+  
+  void show() {
+    state = state.copyWith(isVisible: true);
+  }
+  
+  void hide() {
+    state = state.copyWith(isVisible: false);
+  }
+  
+  void setWidth(double width) {
+    state = state.copyWith(width: width);
+  }
+}
+
 // Layout breakpoint provider
 final layoutBreakpointProvider = Provider<LayoutBreakpoint>((ref) {
   // This would typically be updated based on screen size

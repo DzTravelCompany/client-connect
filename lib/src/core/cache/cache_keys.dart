@@ -5,6 +5,7 @@ class CacheKeys {
   static String clientsPaginated(int page, int limit, String? searchTerm) => 
       '${clientPrefix}_paginated_${page}_${limit}_${searchTerm ?? 'all'}';
   static const String clientCompanies = '${clientPrefix}_companies';
+  static const String clientJobTitles = '${clientPrefix}_job_titles';
   
   // Tag cache keys
   static const String tagPrefix = 'tags';

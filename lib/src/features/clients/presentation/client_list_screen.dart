@@ -1,3 +1,5 @@
+import 'package:client_connect/src/features/tags/data/tag_model.dart';
+import 'package:client_connect/src/features/tags/logic/tag_providers.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -28,6 +30,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
   bool _sortAscending = true;
   List<String> _selectedTags = [];
   String? _selectedCompany;
+  String? _selectedJobTitle;
   DateTimeRange? _dateRange;
 
   @override
@@ -51,12 +54,19 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
   void _onFilterChanged({
     List<String>? tags,
     String? company,
+    String? jobTitle,
     DateTimeRange? dateRange,
   }) {
     setState(() {
       if (tags != null) _selectedTags = tags;
       if (company != null) _selectedCompany = company;
+      if (jobTitle != null) _selectedJobTitle = jobTitle;
       if (dateRange != null) _dateRange = dateRange;
+    });
+    
+    Future.microtask(() {
+      final currentValue = ref.read(clientRefreshTriggerProvider);
+      ref.read(clientRefreshTriggerProvider.notifier).state = currentValue + 1;
     });
   }
 
@@ -65,6 +75,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       _searchTerm = '';
       _selectedTags.clear();
       _selectedCompany = null;
+      _selectedJobTitle = null;
       _dateRange = null;
       _searchController.clear();
     });
@@ -100,6 +111,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       searchTerm: _searchTerm.isEmpty ? null : _searchTerm,
       tags: _selectedTags.isEmpty ? null : _selectedTags,
       company: _selectedCompany,
+      jobTitle: _selectedJobTitle,
       dateRange: _dateRange,
       sortBy: _sortBy,
       sortAscending: _sortAscending,
@@ -112,6 +124,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
   @override
   Widget build(BuildContext context) {
     final detailPanelState = ref.watch(detailPanelStateProvider);
+    final filterPanelState = ref.watch(filterPanelStateProvider);
 
     // Listen to client form state to refresh list when clients are saved
     ref.listen<ClientFormState>(clientFormProvider, (previous, next) {
@@ -133,6 +146,14 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
       }
     });
 
+    ref.listen<AsyncValue<List<TagModel>>>(allTagsProvider, (previous, next) {
+      // Force refresh when tags are modified
+      if (previous != null && next.hasValue && previous.hasValue) {
+        final currentValue = ref.read(clientRefreshTriggerProvider);
+        ref.read(clientRefreshTriggerProvider.notifier).state = currentValue + 1;
+      }
+    });
+
     return Container(
       color: DesignTokens.surfacePrimary,
       child: Column(
@@ -141,28 +162,35 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
           Expanded(
             child: Row(
               children: [
-                // Left Column: Filter Panel
-                Container(
-                  width: 320,
-                  decoration: BoxDecoration(
-                    color: DesignTokens.surfaceSecondary,
-                    border: Border(
-                      right: BorderSide(
-                        color: DesignTokens.borderPrimary,
-                        width: 1,
-                      ),
-                    ),
-                    boxShadow: DesignTokens.shadowLow,
-                  ),
-                  child: ClientFilterPanel(
-                    searchController: _searchController,
-                    onSearchChanged: _onSearchChanged,
-                    selectedTags: _selectedTags,
-                    selectedCompany: _selectedCompany,
-                    dateRange: _dateRange,
-                    onFilterChanged: _onFilterChanged,
-                    onClearFilters: _clearFilters,
-                  ),
+                // Left Column: Filter Panel - Made conditionally visible with animation
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  width: filterPanelState.isVisible ? filterPanelState.width : 0,
+                  child: filterPanelState.isVisible
+                      ? Container(
+                          decoration: BoxDecoration(
+                            color: DesignTokens.surfaceSecondary,
+                            border: Border(
+                              right: BorderSide(
+                                color: DesignTokens.borderPrimary,
+                                width: 1,
+                              ),
+                            ),
+                            boxShadow: DesignTokens.shadowLow,
+                          ),
+                          child: ClientFilterPanel(
+                            searchController: _searchController,
+                            onSearchChanged: _onSearchChanged,
+                            selectedTags: _selectedTags,
+                            selectedCompany: _selectedCompany,
+                            selectedJobTitle: _selectedJobTitle,
+                            dateRange: _dateRange,
+                            onFilterChanged: _onFilterChanged,
+                            onClearFilters: _clearFilters,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
                 ),
 
                 // Center Column: Client Cards
@@ -190,7 +218,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                               
                               return LayoutBuilder(
                                 builder: (context, constraints) => PaginatedListView<ClientModel>(
-                                  key: ValueKey('clients_${refreshTrigger}_${_searchTerm}_${_selectedTags.join(',')}_${_selectedCompany}_${_dateRange?.start}_${_sortBy}_$_sortAscending'),
+                                  key: ValueKey('clients_${refreshTrigger}_${_searchTerm}_${_selectedTags.join(',')}_${_selectedCompany}_${_selectedJobTitle}_${_dateRange?.start}_${_sortBy}_$_sortAscending'),
                                   loadData: _loadClients,
                                   pageSize: 20,
                                   searchQuery: _searchTerm,
@@ -244,6 +272,8 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
   }
 
   Widget _buildClientListHeader() {
+    final filterPanelState = ref.watch(filterPanelStateProvider);
+    
     return Container(
       padding: const EdgeInsets.all(DesignTokens.space6),
       decoration: BoxDecoration(
@@ -311,6 +341,13 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
                   children: [
                     Row(
                       children: [
+                        DesignSystemComponents.secondaryButton(
+                          text: '',
+                          icon: filterPanelState.isVisible ? FluentIcons.side_panel : FluentIcons.filter,
+                          onPressed: () => ref.read(filterPanelStateProvider.notifier).toggleVisibility(),
+                          tooltip: filterPanelState.isVisible ? 'Hide filters' : 'Show filters',
+                        ),
+                        SizedBox(width: DesignTokens.space2),
                         Expanded(
                           child: ComboBox<String>(
                             value: _sortBy,
@@ -395,6 +432,12 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  DesignSystemComponents.secondaryButton(
+                    text: filterPanelState.isVisible ? 'Hide Filters' : 'Show Filters',
+                    icon: filterPanelState.isVisible ? FluentIcons.side_panel : FluentIcons.filter,
+                    onPressed: () => ref.read(filterPanelStateProvider.notifier).toggleVisibility(),
+                  ),
+                  SizedBox(width: DesignTokens.space3),
                   SizedBox(
                     width: 140,
                     child: ComboBox<String>(
@@ -581,6 +624,7 @@ class _ClientListScreenState extends ConsumerState<ClientListScreen> {
     return _searchTerm.isNotEmpty ||
            _selectedTags.isNotEmpty ||
            _selectedCompany != null ||
+           _selectedJobTitle != null ||
            _dateRange != null;
   }
 

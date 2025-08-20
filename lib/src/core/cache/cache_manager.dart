@@ -171,6 +171,7 @@ class CacheKeys {
   static const String templatePrefix = 'template_';
   static const String campaignPrefix = 'campaign_';
   static const String analyticsPrefix = 'analytics_';
+  static const String clientJobTitles = '${clientPrefix}_job_titles';
   
   static String clientById(int id) => '${clientPrefix}by_id_$id';
   static String clientsPaginated(int page, int limit, String? search) => 

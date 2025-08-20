@@ -3,6 +3,8 @@ import 'package:client_connect/src/features/import_export/data/import_export_mod
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/design_system/design_tokens.dart';
+import '../../../core/design_system/component_library.dart';
 import '../logic/import_export_providers.dart';
 import '../../clients/logic/client_providers.dart';
 import 'import_wizard_dialog.dart';
@@ -26,7 +28,10 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen> {
 
     return ScaffoldPage(
       header: PageHeader(
-        title: const Text('Import & Export'),
+        title: Text(
+          'Import & Export',
+          style: DesignTextStyles.titleLarge,
+        ),
         commandBar: CommandBar(
           primaryItems: [
             CommandBarButton(
@@ -40,46 +45,22 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen> {
       content: ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(DesignTokens.pageMargin),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header section
-              Text(
-                'Client Data Management',
-                style: FluentTheme.of(context).typography.title,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Import clients from external files or export your client database for backup and sharing.',
-                style: FluentTheme.of(context).typography.body,
-              ),
+              _buildHeaderSection(context),
               
-              const SizedBox(height: 32),
+              const SizedBox(height: DesignTokens.sectionSpacing),
         
-              // Import/Export cards
-              Row(
-                children: [
-                  // Import card
-                  Expanded(
-                    child: _buildImportCard(context, importState),
-                  ),
-                  const SizedBox(width: 24),
-                  // Export card
-                  Expanded(
-                    child: _buildExportCard(context, exportState, clientsAsync),
-                  ),
-                ],
-              ),
+              _buildActionCards(context, importState, exportState, clientsAsync),
         
-              const SizedBox(height: 32),
+              const SizedBox(height: DesignTokens.sectionSpacing),
         
-              // Recent operations
               _buildRecentOperations(context, importState, exportState),
         
-              const SizedBox(height: 32),
+              const SizedBox(height: DesignTokens.sectionSpacing),
         
-              // Help section
               _buildHelpSection(context),
             ],
           ),
@@ -88,370 +69,371 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen> {
     );
   }
 
+  Widget _buildHeaderSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Client Data Management',
+          style: DesignTextStyles.display,
+        ),
+        const SizedBox(height: DesignTokens.space2),
+        Text(
+          'Import clients from external files or export your client database for backup and sharing.',
+          style: DesignTextStyles.bodyLarge.copyWith(
+            color: DesignTokens.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionCards(BuildContext context, ImportState importState, ExportState exportState, AsyncValue clientsAsync) {
+    return Row(
+      children: [
+        // Import card
+        Expanded(
+          child: _buildImportCard(context, importState),
+        ),
+        const SizedBox(width: DesignTokens.sectionSpacing),
+        // Export card
+        Expanded(
+          child: _buildExportCard(context, exportState, clientsAsync),
+        ),
+      ],
+    );
+  }
+
   Widget _buildImportCard(BuildContext context, ImportState importState) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    FluentIcons.download,
-                    color: Colors.blue,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Import Clients',
-                        style: FluentTheme.of(context).typography.subtitle,
-                      ),
-                      const SizedBox(height: 4),
-                      const Text('Add clients from CSV, Excel, or JSON files'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Import progress
-            if (importState.isLoading && importState.progress != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: ProgressRing(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(importState.progress!.currentOperation),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ProgressBar(
-                    value: importState.progress!.progressPercentage * 100,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${importState.progress!.processedRecords} of ${importState.progress!.totalRecords} records processed',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-
-            // Import result summary
-            if (importState.result != null)
+    return DesignSystemComponents.glassmorphismCard(
+      semanticLabel: 'Import clients from external files',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
+                width: DesignTokens.iconSizeXLarge + DesignTokens.space4,
+                height: DesignTokens.iconSizeXLarge + DesignTokens.space4,
                 decoration: BoxDecoration(
-                  color: importState.result!.hasErrors 
-                      ? Colors.orange.withValues(alpha: 0.1)
-                      : Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: importState.result!.hasErrors 
-                        ? Colors.orange.withValues(alpha: 0.3)
-                        : Colors.green.withValues(alpha: 0.3),
-                  ),
+                  color: DesignTokens.withOpacity(DesignTokens.semanticInfo, 0.1),
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
                 ),
+                child: Icon(
+                  FluentIcons.download,
+                  color: DesignTokens.semanticInfo,
+                  size: DesignTokens.iconSizeLarge,
+                ),
+              ),
+              const SizedBox(width: DesignTokens.space4),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          importState.result!.hasErrors 
-                              ? FluentIcons.warning 
-                              : FluentIcons.completed,
-                          size: 16,
-                          color: importState.result!.hasErrors ? Colors.orange : Colors.green,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Last Import: ${importState.result!.successfulImports} successful, ${importState.result!.failedImports} failed',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: importState.result!.hasErrors ? Colors.orange : Colors.green,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      'Import Clients',
+                      style: DesignTextStyles.subtitle,
                     ),
-                    if (importState.result!.hasErrors) ...[
-                      const SizedBox(height: 8),
-                      Button(
-                        onPressed: () => _showImportResult(context, importState.result!),
-                        child: const Text('View Error Details'),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-            // Error message
-            if (importState.error != null)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(FluentIcons.error, size: 16, color: Colors.red),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Import failed: ${importState.error}',
-                        style: TextStyle(color: Colors.red),
+                    const SizedBox(height: DesignTokens.space1),
+                    Text(
+                      'Add clients from CSV, Excel, or JSON files',
+                      style: DesignTextStyles.body.copyWith(
+                        color: DesignTokens.textSecondary,
                       ),
                     ),
                   ],
                 ),
               ),
+            ],
+          ),
 
-            // Import actions
-            Row(
-              children: [
-                FilledButton(
-                  onPressed: importState.isLoading ? null : () => _showImportWizard(context),
-                  child: const Text('Import Clients'),
-                ),
-                const SizedBox(width: 12),
-                if (importState.result != null)
-                  Button(
-                    onPressed: () => _showImportResult(context, importState.result!),
-                    child: const Text('View Last Result'),
-                  ),
-              ],
-            ),
+          const SizedBox(height: DesignTokens.sectionSpacing),
 
-            const SizedBox(height: 16),
+          if (importState.isLoading && importState.progress != null)
+            _buildProgressSection(importState.progress!),
 
-            // Supported formats
-            Text(
-              'Supported formats: CSV, JSON, Excel (XLSX)',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[100],
+          if (importState.result != null)
+            _buildImportResultSummary(importState.result!),
+
+          if (importState.error != null)
+            _buildErrorMessage(importState.error!),
+
+          Row(
+            children: [
+              DesignSystemComponents.primaryButton(
+                text: 'Import Clients',
+                icon: FluentIcons.download,
+                onPressed: importState.isLoading ? null : () => _showImportWizard(context),
+                isLoading: importState.isLoading,
+                semanticLabel: 'Start client import process',
               ),
+              const SizedBox(width: DesignTokens.space3),
+              if (importState.result != null)
+                DesignSystemComponents.secondaryButton(
+                  text: 'View Last Result',
+                  icon: FluentIcons.view,
+                  onPressed: () => _showImportResult(context, importState.result!),
+                  semanticLabel: 'View details of last import operation',
+                ),
+            ],
+          ),
+
+          const SizedBox(height: DesignTokens.space4),
+
+          Text(
+            'Supported formats: CSV, JSON, Excel (XLSX)',
+            style: DesignTextStyles.caption.copyWith(
+              color: DesignTokens.textTertiary,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildExportCard(BuildContext context, ExportState exportState, AsyncValue clientsAsync) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    FluentIcons.upload,
-                    color: Colors.green,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Export Clients',
-                        style: FluentTheme.of(context).typography.subtitle,
-                      ),
-                      const SizedBox(height: 4),
-                      const Text('Save your client database to CSV or JSON'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Export progress
-            if (exportState.isLoading && exportState.progress != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: ProgressRing(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(exportState.progress!.currentOperation),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ProgressBar(
-                    value: exportState.progress!.progressPercentage * 100,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${exportState.progress!.processedRecords} of ${exportState.progress!.totalRecords} records processed',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-
-            // Export result summary
-            if (exportState.result != null)
+    return DesignSystemComponents.glassmorphismCard(
+      semanticLabel: 'Export client database to external files',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
               Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
+                width: DesignTokens.iconSizeXLarge + DesignTokens.space4,
+                height: DesignTokens.iconSizeXLarge + DesignTokens.space4,
                 decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                  color: DesignTokens.withOpacity(DesignTokens.semanticSuccess, 0.1),
+                  borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
                 ),
+                child: Icon(
+                  FluentIcons.upload,
+                  color: DesignTokens.semanticSuccess,
+                  size: DesignTokens.iconSizeLarge,
+                ),
+              ),
+              const SizedBox(width: DesignTokens.space4),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(FluentIcons.completed, size: 16, color: Colors.green),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Last Export: ${exportState.result!.totalRecords} clients exported',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
                     Text(
-                      'File size: ${exportState.result!.fileSizeFormatted}',
-                      style: const TextStyle(fontSize: 12),
+                      'Export Clients',
+                      style: DesignTextStyles.subtitle,
                     ),
-                    const SizedBox(height: 8),
-                    Button(
-                      onPressed: () => _showExportResult(context, exportState.result!),
-                      child: const Text('View Export Details'),
+                    const SizedBox(height: DesignTokens.space1),
+                    Text(
+                      'Save your client database to CSV or JSON',
+                      style: DesignTextStyles.body.copyWith(
+                        color: DesignTokens.textSecondary,
+                      ),
                     ),
                   ],
                 ),
               ),
+            ],
+          ),
 
-            // Error message
-            if (exportState.error != null)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: Row(
+          const SizedBox(height: DesignTokens.sectionSpacing),
+
+          if (exportState.isLoading && exportState.progress != null)
+            _buildProgressSection(exportState.progress!),
+
+          if (exportState.result != null)
+            _buildExportResultSummary(exportState.result!),
+
+          if (exportState.error != null)
+            _buildErrorMessage(exportState.error!),
+
+          clientsAsync.when(
+            data: (clients) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Icon(FluentIcons.error, size: 16, color: Colors.red),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Export failed: ${exportState.error}',
-                        style: TextStyle(color: Colors.red),
-                      ),
+                    DesignSystemComponents.primaryButton(
+                      text: 'Export Clients',
+                      icon: FluentIcons.upload,
+                      onPressed: (exportState.isLoading || clients.isEmpty) 
+                          ? null 
+                          : () => _showExportWizard(context, clients),
+                      isLoading: exportState.isLoading,
+                      semanticLabel: 'Start client export process',
                     ),
+                    const SizedBox(width: DesignTokens.space3),
+                    if (exportState.result != null)
+                      DesignSystemComponents.secondaryButton(
+                        text: 'View Last Result',
+                        icon: FluentIcons.view,
+                        onPressed: () => _showExportResult(context, exportState.result!),
+                        semanticLabel: 'View details of last export operation',
+                      ),
                   ],
                 ),
-              ),
+                const SizedBox(height: DesignTokens.space4),
+                DesignSystemComponents.statusBadge(
+                  text: clients.isEmpty 
+                      ? 'No clients to export'
+                      : '${clients.length} clients available',
+                  type: clients.isEmpty ? SemanticColorType.warning : SemanticColorType.info,
+                  icon: FluentIcons.people,
+                  semanticLabel: clients.isEmpty 
+                      ? 'No clients available for export'
+                      : '${clients.length} clients ready for export',
+                ),
+              ],
+            ),
+            loading: () => DesignSystemComponents.loadingIndicator(
+              message: 'Loading clients...',
+              size: DesignTokens.iconSizeMedium,
+            ),
+            error: (error, stack) => _buildErrorMessage('Error loading clients: $error'),
+          ),
+        ],
+      ),
+    );
+  }
 
-            // Export actions
-            clientsAsync.when(
-              data: (clients) => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      FilledButton(
-                        onPressed: (exportState.isLoading || clients.isEmpty) 
-                            ? null 
-                            : () => _showExportWizard(context, clients),
-                        child: const Text('Export Clients'),
-                      ),
-                      const SizedBox(width: 12),
-                      if (exportState.result != null)
-                        Button(
-                          onPressed: () => _showExportResult(context, exportState.result!),
-                          child: const Text('View Last Result'),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    clients.isEmpty 
-                        ? 'No clients to export'
-                        : '${clients.length} clients available for export',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: clients.isEmpty ? Colors.red : Colors.grey[100],
-                    ),
-                  ),
-                ],
+  Widget _buildProgressSection(dynamic progress) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: DesignTokens.space4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: DesignTokens.iconSizeSmall,
+                height: DesignTokens.iconSizeSmall,
+                child: const ProgressRing(strokeWidth: 2),
               ),
-              loading: () => const Row(
-                children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: ProgressRing(strokeWidth: 2),
-                  ),
-                  SizedBox(width: 8),
-                  Text('Loading clients...'),
-                ],
+              const SizedBox(width: DesignTokens.space2),
+              Text(
+                progress.currentOperation,
+                style: DesignTextStyles.body.copyWith(
+                  fontWeight: DesignTokens.fontWeightMedium,
+                ),
               ),
-              error: (error, stack) => Text(
-                'Error loading clients: $error',
-                style: TextStyle(color: Colors.red, fontSize: 12),
+            ],
+          ),
+          const SizedBox(height: DesignTokens.space2),
+          ProgressBar(
+            value: progress.progressPercentage * 100,
+          ),
+          const SizedBox(height: DesignTokens.space1),
+          Text(
+            '${progress.processedRecords} of ${progress.totalRecords} records processed',
+            style: DesignTextStyles.caption,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImportResultSummary(ImportResult result) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: DesignTokens.space4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              DesignSystemComponents.statusBadge(
+                text: result.hasErrors ? 'Completed with errors' : 'Import successful',
+                type: result.hasErrors ? SemanticColorType.warning : SemanticColorType.success,
+                icon: result.hasErrors ? FluentIcons.warning : FluentIcons.completed,
               ),
+              const Spacer(),
+              Text(
+                '${result.successfulImports} successful, ${result.failedImports} failed',
+                style: DesignTextStyles.caption.copyWith(
+                  fontWeight: DesignTokens.fontWeightMedium,
+                ),
+              ),
+            ],
+          ),
+          if (result.hasErrors) ...[
+            const SizedBox(height: DesignTokens.space3),
+            DesignSystemComponents.secondaryButton(
+              text: 'View Error Details',
+              icon: FluentIcons.error,
+              onPressed: () => _showImportResult(context, result),
+              semanticLabel: 'View detailed error information',
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExportResultSummary(ExportResult result) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: DesignTokens.space4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              DesignSystemComponents.statusBadge(
+                text: 'Export successful',
+                type: SemanticColorType.success,
+                icon: FluentIcons.completed,
+              ),
+              const Spacer(),
+              Text(
+                '${result.totalRecords} clients',
+                style: DesignTextStyles.caption.copyWith(
+                  fontWeight: DesignTokens.fontWeightMedium,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: DesignTokens.space2),
+          Text(
+            'File size: ${result.fileSizeFormatted}',
+            style: DesignTextStyles.caption,
+          ),
+          const SizedBox(height: DesignTokens.space3),
+          DesignSystemComponents.secondaryButton(
+            text: 'View Export Details',
+            icon: FluentIcons.view,
+            onPressed: () => _showExportResult(context, result),
+            semanticLabel: 'View detailed export information',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorMessage(String error) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(DesignTokens.space3),
+      margin: const EdgeInsets.only(bottom: DesignTokens.space4),
+      decoration: BoxDecoration(
+        color: DesignTokens.withOpacity(DesignTokens.semanticError, 0.1),
+        borderRadius: BorderRadius.circular(DesignTokens.radiusMedium),
+        border: Border.all(
+          color: DesignTokens.withOpacity(DesignTokens.semanticError, 0.3),
         ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            FluentIcons.error,
+            size: DesignTokens.iconSizeSmall,
+            color: DesignTokens.semanticError,
+          ),
+          const SizedBox(width: DesignTokens.space2),
+          Expanded(
+            child: Text(
+              error,
+              style: DesignTextStyles.body.copyWith(
+                color: DesignTokens.semanticError,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -463,46 +445,44 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen> {
       return const SizedBox.shrink();
     }
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Recent Operations',
-              style: FluentTheme.of(context).typography.subtitle,
+    return DesignSystemComponents.standardCard(
+      semanticLabel: 'Recent import and export operations',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Recent Operations',
+            style: DesignTextStyles.subtitle,
+          ),
+          const SizedBox(height: DesignTokens.space4),
+          
+          if (importState.result != null)
+            _buildOperationSummary(
+              'Import',
+              FluentIcons.download,
+              DesignTokens.semanticInfo,
+              '${importState.result!.successfulImports} clients imported',
+              'Processing time: ${importState.result!.processingTime.inSeconds}s',
+              importState.result!.hasErrors ? 'With errors' : 'Successful',
+              importState.result!.hasErrors ? DesignTokens.semanticWarning : DesignTokens.semanticSuccess,
+              () => _showImportResult(context, importState.result!),
             ),
-            const SizedBox(height: 16),
-            
-            if (importState.result != null)
-              _buildOperationSummary(
-                'Import',
-                FluentIcons.download,
-                Colors.blue,
-                '${importState.result!.successfulImports} clients imported',
-                'Processing time: ${importState.result!.processingTime.inSeconds}s',
-                importState.result!.hasErrors ? 'With errors' : 'Successful',
-                importState.result!.hasErrors ? Colors.orange : Colors.green,
-                () => _showImportResult(context, importState.result!),
-              ),
-            
-            if (importState.result != null && exportState.result != null)
-              const SizedBox(height: 12),
-            
-            if (exportState.result != null)
-              _buildOperationSummary(
-                'Export',
-                FluentIcons.upload,
-                Colors.green,
-                '${exportState.result!.totalRecords} clients exported',
-                'File size: ${exportState.result!.fileSizeFormatted}',
-                'Successful',
-                Colors.green,
-                () => _showExportResult(context, exportState.result!),
-              ),
-          ],
-        ),
+          
+          if (importState.result != null && exportState.result != null)
+            const SizedBox(height: DesignTokens.space3),
+          
+          if (exportState.result != null)
+            _buildOperationSummary(
+              'Export',
+              FluentIcons.upload,
+              DesignTokens.semanticSuccess,
+              '${exportState.result!.totalRecords} clients exported',
+              'File size: ${exportState.result!.fileSizeFormatted}',
+              'Successful',
+              DesignTokens.semanticSuccess,
+              () => _showExportResult(context, exportState.result!),
+            ),
+        ],
       ),
     );
   }
@@ -517,105 +497,102 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen> {
     Color statusColor,
     VoidCallback onTap,
   ) {
-    return GestureDetector(
+    return DesignSystemComponents.standardCard(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[40]),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: iconColor),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    primaryText,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+      isHoverable: true,
+      semanticLabel: '$operation operation: $primaryText, $status',
+      padding: const EdgeInsets.all(DesignTokens.space3),
+      child: Row(
+        children: [
+          Icon(icon, size: DesignTokens.iconSizeMedium, color: iconColor),
+          const SizedBox(width: DesignTokens.space3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  primaryText,
+                  style: DesignTextStyles.body.copyWith(
+                    fontWeight: DesignTokens.fontWeightMedium,
                   ),
-                  Text(
-                    secondaryText,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[100]),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-              ),
-              child: Text(
-                status,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: statusColor,
                 ),
-              ),
+                const SizedBox(height: DesignTokens.space1),
+                Text(
+                  secondaryText,
+                  style: DesignTextStyles.caption,
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            const Icon(FluentIcons.chevron_right, size: 16),
-          ],
-        ),
+          ),
+          DesignSystemComponents.statusBadge(
+            text: status,
+            type: statusColor == DesignTokens.semanticSuccess 
+                ? SemanticColorType.success 
+                : statusColor == DesignTokens.semanticWarning 
+                    ? SemanticColorType.warning 
+                    : SemanticColorType.info,
+          ),
+          const SizedBox(width: DesignTokens.space2),
+          Icon(
+            FluentIcons.chevron_right,
+            size: DesignTokens.iconSizeSmall,
+            color: DesignTokens.textTertiary,
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildHelpSection(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(FluentIcons.info, size: 20, color: Colors.blue),
-                const SizedBox(width: 12),
-                Text(
-                  'Import & Export Guidelines',
-                  style: FluentTheme.of(context).typography.subtitle,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            _buildHelpItem(
-              'CSV Format',
-              'Use comma-separated values with headers: First Name, Last Name, Email, Phone, Company, Job Title, Address, Notes',
-            ),
-            _buildHelpItem(
-              'Required Fields',
-              'First Name and Last Name are required. Email is optional but recommended for campaigns.',
-            ),
-            _buildHelpItem(
-              'Duplicate Handling',
-              'By default, duplicates are detected by email address. You can choose to allow or skip duplicates.',
-            ),
-            _buildHelpItem(
-              'Large Files',
-              'Import/export operations run in the background. You can continue using the application while processing.',
-            ),
-            _buildHelpItem(
-              'Data Validation',
-              'Email addresses are automatically validated. Invalid entries will be reported in the import results.',
-            ),
-          ],
-        ),
+    return DesignSystemComponents.standardCard(
+      semanticLabel: 'Import and export guidelines and help information',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                FluentIcons.info,
+                size: DesignTokens.iconSizeMedium,
+                color: DesignTokens.semanticInfo,
+              ),
+              const SizedBox(width: DesignTokens.space3),
+              Text(
+                'Import & Export Guidelines',
+                style: DesignTextStyles.subtitle,
+              ),
+            ],
+          ),
+          const SizedBox(height: DesignTokens.space4),
+          
+          _buildHelpItem(
+            'CSV Format',
+            'Use comma-separated values with headers: First Name, Last Name, Email, Phone, Company, Job Title, Address, Notes',
+          ),
+          _buildHelpItem(
+            'Required Fields',
+            'First Name and Last Name are required. Email is optional but recommended for campaigns.',
+          ),
+          _buildHelpItem(
+            'Duplicate Handling',
+            'By default, duplicates are detected by email address. You can choose to allow or skip duplicates.',
+          ),
+          _buildHelpItem(
+            'Large Files',
+            'Import/export operations run in the background. You can continue using the application while processing.',
+          ),
+          _buildHelpItem(
+            'Data Validation',
+            'Email addresses are automatically validated. Invalid entries will be reported in the import results.',
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildHelpItem(String title, String description) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: DesignTokens.space3),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -624,25 +601,26 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen> {
             height: 6,
             margin: const EdgeInsets.only(top: 6),
             decoration: BoxDecoration(
-              color: Colors.blue,
+              color: DesignTokens.semanticInfo,
               shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: DesignTokens.space3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: DesignTextStyles.body.copyWith(
+                    fontWeight: DesignTokens.fontWeightMedium,
+                  ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: DesignTokens.space1),
                 Text(
                   description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[100],
+                  style: DesignTextStyles.caption.copyWith(
+                    color: DesignTokens.textSecondary,
                   ),
                 ),
               ],

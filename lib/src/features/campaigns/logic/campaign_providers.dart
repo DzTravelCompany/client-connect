@@ -859,6 +859,15 @@ class CampaignActionsNotifier extends StateNotifier<CampaignActionsState> {
     try {
       await _controller.stopCampaign(campaignId);
       await _dao.updateCampaignStatus(campaignId, 'paused');
+      
+      final syncService = RealtimeSyncService();
+      syncService.emitEvent(CampaignEvent(
+        campaignId: campaignId,
+        type: CampaignEventType.paused,
+        timestamp: DateTime.now(),
+        source: 'CampaignActionsNotifier',
+      ));
+      
       state = state.copyWith(
         successMessage: 'Campaign paused successfully',
         error: null,

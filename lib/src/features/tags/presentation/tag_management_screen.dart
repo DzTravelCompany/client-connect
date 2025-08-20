@@ -1,3 +1,4 @@
+import 'package:client_connect/constants.dart' show logger;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -288,6 +289,9 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                                         _searchController.clear();
                                         _selectedTagFilter.clear();
                                       });
+                                      Future.microtask(() {
+                                        ref.invalidate(allClientsWithTagsProvider);
+                                      });
                                     },
                                   ),
                                 ],
@@ -297,7 +301,7 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                         }
 
                         return ListView.builder(
-                          key: ValueKey('clients_${filteredClients.length}_${DateTime.now().millisecondsSinceEpoch ~/ 1000}'), // Force rebuild
+                          key: ValueKey('clients_${filteredClients.length}_${_selectedTagFilter.join(",")}_${DateTime.now().millisecondsSinceEpoch ~/ 1000}'), // Force rebuild
                           itemCount: filteredClients.length,
                           itemBuilder: (context, index) {
                             final client = filteredClients[index];
@@ -460,6 +464,17 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                       _selectedTagFilter.add(tag.id);
                     }
                   });
+                  Future.microtask(() {
+                    logger.i('Invalidating providers for tag selection: $_selectedTagFilter');
+                    
+                    // Invalidate the specific provider with current tag selection
+                    if (_selectedTagFilter.isNotEmpty) {
+                      ref.invalidate(clientsWithTagsProvider(_selectedTagFilter));
+                    }
+                    
+                    // Also invalidate the all clients provider to ensure consistency
+                    ref.invalidate(allClientsWithTagsProvider);
+                  });
                 },
               );
             }),
@@ -470,6 +485,9 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                 onPressed: () {
                   setState(() {
                     _selectedTagFilter.clear();
+                  });
+                  Future.microtask(() {
+                    ref.invalidate(allClientsWithTagsProvider);
                   });
                 },
               ),

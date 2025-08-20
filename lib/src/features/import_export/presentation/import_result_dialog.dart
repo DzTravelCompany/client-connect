@@ -1,6 +1,7 @@
 import 'package:client_connect/src/features/import_export/data/import_export_model.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-
+import '../../../core/design_system/design_tokens.dart';
+import '../../../core/design_system/component_library.dart';
 
 class ImportResultDialog extends StatelessWidget {
   final ImportResult result;
@@ -10,25 +11,15 @@ class ImportResultDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ContentDialog(
-      constraints: const BoxConstraints(maxWidth: 700, maxHeight: 600),
-      title: const Text('Import Results'),
+      constraints: const BoxConstraints(maxWidth: 750, maxHeight: 650),
+      title: Text(
+        'Import Results',
+        style: DesignTextStyles.titleLarge,
+      ),
       content: Column(
         children: [
-          // Summary section
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: result.hasErrors 
-                  ? Colors.orange.withValues(alpha: 0.1)
-                  : Colors.green.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: result.hasErrors 
-                    ? Colors.orange.withValues(alpha: 0.3)
-                    : Colors.green.withValues(alpha: 0.3),
-              ),
-            ),
+          DesignSystemComponents.standardCard(
+            semanticLabel: 'Import results summary',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -36,19 +27,19 @@ class ImportResultDialog extends StatelessWidget {
                   children: [
                     Icon(
                       result.hasErrors ? FluentIcons.warning : FluentIcons.completed,
-                      size: 24,
-                      color: result.hasErrors ? Colors.orange : Colors.green,
+                      size: DesignTokens.iconSizeLarge,
+                      color: result.hasErrors ? DesignTokens.semanticWarning : DesignTokens.semanticSuccess,
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: DesignTokens.space3),
                     Text(
                       'Import ${result.hasErrors ? "Completed with Warnings" : "Successful"}',
-                      style: FluentTheme.of(context).typography.subtitle?.copyWith(
-                        color: result.hasErrors ? Colors.orange : Colors.green,
+                      style: DesignTextStyles.subtitle.copyWith(
+                        color: result.hasErrors ? DesignTokens.semanticWarning : DesignTokens.semanticSuccess,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: DesignTokens.space4),
                 
                 Row(
                   children: [
@@ -56,94 +47,173 @@ class ImportResultDialog extends StatelessWidget {
                       child: _buildStatCard(
                         'Total Records',
                         result.totalRecords.toString(),
-                        Colors.blue,
+                        DesignTokens.semanticInfo,
+                        FluentIcons.number_field,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: DesignTokens.space3),
                     Expanded(
                       child: _buildStatCard(
                         'Successful',
                         result.successfulImports.toString(),
-                        Colors.green,
+                        DesignTokens.semanticSuccess,
+                        FluentIcons.completed,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: DesignTokens.space3),
                     Expanded(
                       child: _buildStatCard(
                         'Failed',
                         result.failedImports.toString(),
-                        Colors.red,
+                        DesignTokens.semanticError,
+                        FluentIcons.error,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: DesignTokens.space3),
                     Expanded(
                       child: _buildStatCard(
                         'Success Rate',
                         '${(result.successRate * 100).toInt()}%',
-                        result.successRate > 0.8 ? Colors.green : Colors.orange,
+                        result.successRate > 0.8 ? DesignTokens.semanticSuccess : DesignTokens.semanticWarning,
+                        FluentIcons.chart,
                       ),
                     ),
                   ],
                 ),
                 
-                const SizedBox(height: 12),
-                Text('Processing time: ${result.processingTime.inSeconds} seconds'),
+                const SizedBox(height: DesignTokens.space3),
+                Text(
+                  'Processing time: ${result.processingTime.inSeconds} seconds',
+                  style: DesignTextStyles.body.copyWith(
+                    color: DesignTokens.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
           
-          const SizedBox(height: 24),
+          const SizedBox(height: DesignTokens.sectionSpacing),
           
-          // Errors section
           if (result.hasErrors) ...[
             Row(
               children: [
-                Icon(FluentIcons.error, size: 20, color: Colors.red),
-                const SizedBox(width: 8),
+                Icon(
+                  FluentIcons.error,
+                  size: DesignTokens.iconSizeMedium,
+                  color: DesignTokens.semanticError,
+                ),
+                const SizedBox(width: DesignTokens.space2),
                 Text(
                   'Import Errors (${result.errors.length})',
-                  style: FluentTheme.of(context).typography.subtitle,
+                  style: DesignTextStyles.subtitle,
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: DesignTokens.space3),
             
             Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[60]),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: ListView.builder(
-                  itemCount: result.errors.length,
-                  itemBuilder: (context, index) {
-                    final error = result.errors[index];
-                    return _buildErrorItem(error);
-                  },
+              child: DesignSystemComponents.standardCard(
+                semanticLabel: 'Import error details list',
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(DesignTokens.space3),
+                      decoration: BoxDecoration(
+                        color: DesignTokens.textSecondary,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: DesignTokens.borderSecondary,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 60,
+                            child: Text(
+                              'Row',
+                              style: DesignTextStyles.caption.copyWith(
+                                fontWeight: DesignTokens.fontWeightMedium,
+                                color: DesignTokens.textSecondary,
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 80,
+                            child: Text(
+                              'Field',
+                              style: DesignTextStyles.caption.copyWith(
+                                fontWeight: DesignTokens.fontWeightMedium,
+                                color: DesignTokens.textSecondary,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'Value',
+                              style: DesignTextStyles.caption.copyWith(
+                                fontWeight: DesignTokens.fontWeightMedium,
+                                color: DesignTokens.textSecondary,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              'Error Message',
+                              style: DesignTextStyles.caption.copyWith(
+                                fontWeight: DesignTokens.fontWeightMedium,
+                                color: DesignTokens.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: result.errors.length,
+                        itemBuilder: (context, index) {
+                          final error = result.errors[index];
+                          return _buildErrorItem(error);
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ] else ...[
             Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      FluentIcons.completed,
-                      size: 64,
-                      color: Colors.green,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'All records imported successfully!',
-                      style: FluentTheme.of(context).typography.subtitle?.copyWith(
-                        color: Colors.green,
+              child: DesignSystemComponents.standardCard(
+                semanticLabel: 'Import success confirmation',
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        FluentIcons.completed,
+                        size: DesignTokens.iconSizeXLarge,
+                        color: DesignTokens.semanticSuccess,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('No errors occurred during the import process.'),
-                  ],
+                      const SizedBox(height: DesignTokens.space4),
+                      Text(
+                        'All records imported successfully!',
+                        style: DesignTextStyles.subtitle.copyWith(
+                          color: DesignTokens.semanticSuccess,
+                        ),
+                      ),
+                      const SizedBox(height: DesignTokens.space2),
+                      Text(
+                        'No errors occurred during the import process.',
+                        style: DesignTextStyles.body.copyWith(
+                          color: DesignTokens.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -151,43 +221,51 @@ class ImportResultDialog extends StatelessWidget {
         ],
       ),
       actions: [
-        Button(
-          child: const Text('Close'),
+        DesignSystemComponents.secondaryButton(
+          text: 'Close',
           onPressed: () => Navigator.of(context).pop(),
+          semanticLabel: 'Close import results dialog',
         ),
         if (result.hasErrors)
-          FilledButton(
-            child: const Text('Export Error Report'),
+          DesignSystemComponents.primaryButton(
+            text: 'Export Error Report',
+            icon: FluentIcons.download,
             onPressed: () => _exportErrorReport(context, result),
+            semanticLabel: 'Export detailed error report',
           ),
       ],
     );
   }
 
-  Widget _buildStatCard(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
+  Widget _buildStatCard(String label, String value, Color color, IconData icon) {
+    return DesignSystemComponents.standardCard(
+      semanticLabel: '$label: $value',
+      padding: const EdgeInsets.all(DesignTokens.space3),
       child: Column(
         children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: DesignTokens.iconSizeSmall,
+                color: color,
+              ),
+              const SizedBox(width: DesignTokens.space1),
+              Text(
+                value,
+                style: DesignTextStyles.title.copyWith(
+                  color: color,
+                  fontWeight: DesignTokens.fontWeightBold,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: DesignTokens.space2),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 12,
-              color: color,
+            style: DesignTextStyles.caption.copyWith(
+              color: DesignTokens.textSecondary,
             ),
             textAlign: TextAlign.center,
           ),
@@ -198,10 +276,12 @@ class ImportResultDialog extends StatelessWidget {
 
   Widget _buildErrorItem(ImportError error) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(DesignTokens.space3),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: Colors.grey[40]),
+          bottom: BorderSide(
+            color: DesignTokens.borderSecondary,
+          ),
         ),
       ),
       child: Row(
@@ -209,46 +289,40 @@ class ImportResultDialog extends StatelessWidget {
         children: [
           SizedBox(
             width: 60,
-            child: Text(
-              'Row ${error.rowNumber}',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
+            child: DesignSystemComponents.statusBadge(
+              text: '${error.rowNumber}',
+              type: SemanticColorType.info,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: DesignTokens.space3),
           SizedBox(
             width: 80,
             child: Text(
               error.field,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: Colors.blue,
+              style: DesignTextStyles.caption.copyWith(
+                fontWeight: DesignTokens.fontWeightMedium,
+                color: DesignTokens.semanticInfo,
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: DesignTokens.space3),
           Expanded(
             flex: 2,
             child: Text(
               error.value.isEmpty ? '[Empty]' : error.value,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[100],
+              style: DesignTextStyles.caption.copyWith(
+                color: error.value.isEmpty ? DesignTokens.textTertiary : DesignTokens.textSecondary,
                 fontStyle: error.value.isEmpty ? FontStyle.italic : FontStyle.normal,
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: DesignTokens.space3),
           Expanded(
             flex: 3,
             child: Text(
               error.errorMessage,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.red,
+              style: DesignTextStyles.caption.copyWith(
+                color: DesignTokens.semanticError,
               ),
             ),
           ),

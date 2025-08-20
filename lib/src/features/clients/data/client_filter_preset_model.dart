@@ -6,6 +6,7 @@ class ClientFilterPreset {
   final String? searchTerm;
   final List<String> tags;
   final String? company;
+  final String? jobTitle; // Added jobTitle field
   final DateTimeRange? dateRange;
   final String sortBy;
   final bool sortAscending;
@@ -18,6 +19,7 @@ class ClientFilterPreset {
     this.searchTerm,
     this.tags = const [],
     this.company,
+    this.jobTitle, // Added jobTitle parameter
     this.dateRange,
     this.sortBy = 'name',
     this.sortAscending = true,
@@ -32,6 +34,7 @@ class ClientFilterPreset {
       searchTerm: json['searchTerm'] as String?,
       tags: (json['tags'] as List<dynamic>?)?.cast<String>() ?? [],
       company: json['company'] as String?,
+      jobTitle: json['jobTitle'] as String?, // Added jobTitle parsing from JSON
       dateRange: json['dateRange'] != null
           ? DateTimeRange(
               start: DateTime.parse(json['dateRange']['start']),
@@ -52,6 +55,7 @@ class ClientFilterPreset {
       'searchTerm': searchTerm,
       'tags': tags,
       'company': company,
+      'jobTitle': jobTitle, // Added jobTitle to JSON serialization
       'dateRange': dateRange != null
           ? {
               'start': dateRange!.start.toIso8601String(),
@@ -71,6 +75,7 @@ class ClientFilterPreset {
     String? searchTerm,
     List<String>? tags,
     String? company,
+    String? jobTitle, // Added jobTitle parameter to copyWith
     DateTimeRange? dateRange,
     String? sortBy,
     bool? sortAscending,
@@ -83,6 +88,7 @@ class ClientFilterPreset {
       searchTerm: searchTerm ?? this.searchTerm,
       tags: tags ?? this.tags,
       company: company ?? this.company,
+      jobTitle: jobTitle ?? this.jobTitle, // Added jobTitle to copyWith implementation
       dateRange: dateRange ?? this.dateRange,
       sortBy: sortBy ?? this.sortBy,
       sortAscending: sortAscending ?? this.sortAscending,
