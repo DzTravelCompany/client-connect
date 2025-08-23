@@ -717,7 +717,6 @@ class _TemplateEditorScreenState extends ConsumerState<TemplateEditorScreen> {
   }
 
   void _duplicateTemplate(BuildContext context) async {
-  final state = ref.read(templateEditorProvider);
   
   showDialog(
     context: context,

@@ -89,7 +89,7 @@ class SettingsService {
     try {
       // Test WhatsApp Business API connection
       final response = await _dio.get(
-        '${settings.apiUrl}/v22.0/${settings.phoneNumberId}',
+        '${settings.apiUrl}/v23.0/${settings.phoneNumberId}',
         options: Options(
           headers: {
             'Authorization': 'Bearer ${settings.apiKey}',

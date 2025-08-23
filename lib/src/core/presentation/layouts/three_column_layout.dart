@@ -2,19 +2,21 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ThreeColumnLayout extends ConsumerWidget {
-  final Widget sidebar;
+  final Widget? sidebar;
   final Widget mainContent;
   final Widget? detailPanel;
   final bool showDetailPanel;
+  final bool showSidebar;
   final double sidebarWidth;
   final double detailPanelWidth;
 
   const ThreeColumnLayout({
     super.key,
-    required this.sidebar,
+    this.sidebar,
     required this.mainContent,
     this.detailPanel,
     this.showDetailPanel = false,
+    this.showSidebar = true,
     this.sidebarWidth = 280,
     this.detailPanelWidth = 320,
   });
@@ -27,11 +29,11 @@ class ThreeColumnLayout extends ConsumerWidget {
       color: theme.scaffoldBackgroundColor,
       child: Row(
         children: [
-          // Sidebar
-          SizedBox(
-            width: sidebarWidth,
-            child: sidebar,
-          ),
+          if (showSidebar && sidebar != null)
+            SizedBox(
+              width: sidebarWidth,
+              child: sidebar!,
+            ),
           
           // Main Content Area
           Expanded(
@@ -39,10 +41,10 @@ class ThreeColumnLayout extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: theme.cardColor,
                 border: Border(
-                  left: BorderSide(
+                  left: (showSidebar && sidebar != null) ? BorderSide(
                     color: theme.resources.dividerStrokeColorDefault,
                     width: 1,
-                  ),
+                  ) : BorderSide.none,
                   right: showDetailPanel ? BorderSide(
                     color: theme.resources.dividerStrokeColorDefault,
                     width: 1,

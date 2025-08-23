@@ -21,6 +21,7 @@ class CampaignDashboardScreen extends ConsumerStatefulWidget {
 
 class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScreen> {
   bool _showBulkActions = false;
+  bool _showFilterPanel = true;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +39,7 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
               _buildHeader(context, ref),
               Expanded(
                 child: ThreeColumnLayout(
-                  sidebar: const CampaignFilterPanel(),
+                  sidebar: _showFilterPanel ? const CampaignFilterPanel() : null,
                   mainContent: _buildMainContent(context, ref, campaignsAsync, progressAsync, filterState),
                   detailPanel: detailPanelState.isVisible 
                       ? _buildDetailPanel(context, ref, detailPanelState)
@@ -53,6 +54,7 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
                             )
                           : null,
                   showDetailPanel: detailPanelState.isVisible || _showBulkActions,
+                  showSidebar: _showFilterPanel,
                 ),
               ),
             ],
@@ -116,16 +118,23 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
           Row(
             children: [
               DesignSystemComponents.secondaryButton(
-                text: _showBulkActions ? 'Hide Bulk Actions' : 'Bulk Actions',
-                icon: FluentIcons.multi_select,
-                onPressed: () => setState(() => _showBulkActions = !_showBulkActions),
+                text: _showFilterPanel ? 'Hide Filters' : 'Show Filters',
+                icon: _showFilterPanel ? FluentIcons.filter_solid : FluentIcons.filter,
+                onPressed: () => setState(() => _showFilterPanel = !_showFilterPanel),
               ),
-              SizedBox(width: DesignTokens.space3),
-              DesignSystemComponents.secondaryButton(
-                text: 'Analytics',
-                icon: FluentIcons.analytics_report,
-                onPressed: () => context.pushNamed('seeAnalyticsCampaigns'),
-              ),
+              // TODO : bulk operation and analytic system for the future
+              // SizedBox(width: DesignTokens.space3),
+              // DesignSystemComponents.secondaryButton(
+              //   text: _showBulkActions ? 'Hide Bulk Actions' : 'Bulk Actions',
+              //   icon: FluentIcons.multi_select,
+              //   onPressed: () => setState(() => _showBulkActions = !_showBulkActions),
+              // ),
+              // SizedBox(width: DesignTokens.space3),
+              // DesignSystemComponents.secondaryButton(
+              //   text: 'Analytics',
+              //   icon: FluentIcons.analytics_report,
+              //   onPressed: () => context.pushNamed('seeAnalyticsCampaigns'),
+              // ),
               SizedBox(width: DesignTokens.space3),
               DesignSystemComponents.secondaryButton(
                 text: 'Refresh',
@@ -408,7 +417,15 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
       onTap: () {
         ref.read(campaignDetailPanelProvider.notifier).showCampaignDetails(campaign.id);
       },
-      onStart: campaign.isPending ? () => _startCampaign(ref, campaign.id) : null,
+      onStart: (campaign.isPending || campaign.isPaused)
+          ? () {
+              if (campaign.isPaused) {
+                _resumeCampaign(ref, campaign.id);
+              } else {
+                _startCampaign(ref, campaign.id);
+              }
+            }
+          : null,
       onPause: campaign.isInProgress ? () => _pauseCampaign(ref, campaign.id) : null,
       onViewDetails: () => context.go('/campaigns/${campaign.id}'),
     );
@@ -516,6 +533,7 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
                 ),
               ],
             ),
+            
             SizedBox(height: DesignTokens.space3),
             
             // Progress bar
@@ -563,65 +581,15 @@ class _CampaignDashboardScreenState extends ConsumerState<CampaignDashboardScree
     );
   }
 
-  void _startCampaign(WidgetRef ref, int campaignId) async {
-    try {
-      final controller = ref.read(campaignControlProvider);
-      await controller.startCampaign(campaignId);
-      
-      if (mounted) {
-        displayInfoBar(
-          context,
-          builder: (context, close) => InfoBar(
-            title: const Text('Campaign Started'),
-            content: const Text('The campaign has been started and is now sending messages.'),
-            severity: InfoBarSeverity.success,
-            onClose: close,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        displayInfoBar(
-          context,
-          builder: (context, close) => InfoBar(
-            title: const Text('Error'),
-            content: Text('Failed to start campaign: $e'),
-            severity: InfoBarSeverity.error,
-            onClose: close,
-          ),
-        );
-      }
-    }
+  void _startCampaign(WidgetRef ref, int campaignId) {
+    ref.read(campaignActionsProvider.notifier).startCampaign(campaignId);
   }
 
-  void _pauseCampaign(WidgetRef ref, int campaignId) async {
-    try {
-      final controller = ref.read(campaignControlProvider);
-      await controller.stopCampaign(campaignId);
-      
-      if (mounted) {
-        displayInfoBar(
-          context,
-          builder: (context, close) => InfoBar(
-            title: const Text('Campaign Paused'),
-            content: const Text('The campaign has been paused.'),
-            severity: InfoBarSeverity.warning,
-            onClose: close,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        displayInfoBar(
-          context,
-          builder: (context, close) => InfoBar(
-            title: const Text('Error'),
-            content: Text('Failed to pause campaign: $e'),
-            severity: InfoBarSeverity.error,
-            onClose: close,
-          ),
-        );
-      }
-    }
+  void _pauseCampaign(WidgetRef ref, int campaignId) {
+    ref.read(campaignActionsProvider.notifier).pauseCampaign(campaignId);
+  }
+
+  void _resumeCampaign(WidgetRef ref, int campaignId) {
+    ref.read(campaignActionsProvider.notifier).resumeCampaign(campaignId);
   }
 }

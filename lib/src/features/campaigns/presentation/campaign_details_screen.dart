@@ -425,10 +425,11 @@ class CampaignDetailsScreen extends ConsumerWidget {
                 onPressed: () => _showMessageLogs(context),
               ),
               SizedBox(width: DesignTokens.space2),
-              DesignSystemComponents.secondaryButton(
-                text: 'Manage Retries',
-                onPressed: () => _showRetryManagement(context, campaign),
-              ),
+              // TODO : manage retry if need for future
+              // DesignSystemComponents.secondaryButton(
+              //   text: 'Manage Retries',
+              //   onPressed: () => _showRetryManagement(context, campaign),
+              // ),
             ],
           ),
           SizedBox(height: DesignTokens.space4),

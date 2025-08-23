@@ -10,6 +10,7 @@ import 'package:client_connect/src/features/tags/data/tag_model.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show LinearProgressIndicator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../logic/client_providers.dart';
 import '../../data/client_model.dart';
@@ -1008,9 +1009,10 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
 
   // Navigation and action methods
   void _navigateToCreateCampaign() {
-    // TODO
-    // Navigate to campaign creation with this client pre-selected
-    // This would be implemented based on your navigation system
+    context.pushNamed('createCampaigns', extra: {
+      'preselectedClientIds': [widget.clientId],
+      'fromClientDetails': true,
+    });
   }
 
   void _showAllCampaigns(List<CampaignModel> campaigns) {
@@ -1038,9 +1040,7 @@ class _ClientDetailsPanelState extends ConsumerState<ClientDetailsPanel> {
   }
 
   void _viewCampaignDetails(int campaignId) {
-    // TODO
-    // Navigate to campaign details screen
-    // This would be implemented based on your navigation system
+    context.go('/campaigns/$campaignId');
   }
 
   void _startCampaign(int campaignId) async {

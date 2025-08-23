@@ -9,6 +9,9 @@ import 'widgets/tag_form_dialog.dart';
 import 'widgets/bulk_tag_operations_panel.dart';
 import '../../../core/realtime/realtime_sync_service.dart';
 import '../../../core/realtime/event_bus.dart';
+import '../../../core/design_system/design_tokens.dart';
+import '../../../core/design_system/component_library.dart';
+import '../../../core/design_system/layout_system.dart';
 import 'dart:async';
 
 class TagManagementScreen extends ConsumerStatefulWidget {
@@ -98,343 +101,381 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
     final tagUsageStatsAsync = ref.watch(tagUsageStatsProvider);
 
     return ScaffoldPage(
-      header: PageHeader(
-        title: const Text('Tag Management'),
-        commandBar: CommandBar(
-          primaryItems: [
-            CommandBarButton(
-              icon: const Icon(FluentIcons.add),
-              label: const Text('New Tag'),
-              onPressed: () => _showTagDialog(),
-            ),
-            CommandBarButton(
-              icon: const Icon(FluentIcons.bulk_upload),
-              label: const Text('Bulk Operations'),
-              onPressed: () => _showBulkOperationsPanel(),
-            ),
-            CommandBarButton(
-              icon: const Icon(FluentIcons.refresh),
-              label: const Text('Refresh'),
-              onPressed: () => _refreshAllData(),
-            ),
-          ],
-        ),
+      header: LayoutSystem.pageHeader(
+        title: 'Tag Management',
+        subtitle: 'Organize and manage client tags',
+        actions: [
+          DesignSystemComponents.primaryButton(
+            text: 'New Tag',
+            icon: FluentIcons.add,
+            onPressed: () => _showTagDialog(),
+            tooltip: 'Create a new tag',
+          ),
+          DesignSystemComponents.secondaryButton(
+            text: 'Bulk Operations',
+            icon: FluentIcons.bulk_upload,
+            onPressed: () => _showBulkOperationsPanel(),
+            tooltip: 'Perform bulk operations on selected clients',
+          ),
+          DesignSystemComponents.secondaryButton(
+            text: 'Refresh',
+            icon: FluentIcons.refresh,
+            onPressed: () => _refreshAllData(),
+            tooltip: 'Refresh all data',
+          ),
+        ],
       ),
-      content: Padding(
-        padding: const EdgeInsets.all(16.0),
+      content: LayoutSystem.pageContainer(
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Status messages
             if (tagManagementState.error != null)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(FluentIcons.error, size: 16, color: Colors.white),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        tagManagementState.error!,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(FluentIcons.clear, size: 16, color: Colors.white),
-                      onPressed: () => ref.read(tagManagementProvider.notifier).clearMessages(),
-                    ),
-                  ],
+                margin: const EdgeInsets.only(bottom: DesignTokens.space4),
+                child: DesignSystemComponents.statusBadge(
+                  text: tagManagementState.error!,
+                  type: SemanticColorType.error,
+                  icon: FluentIcons.error,
                 ),
               ),
 
             if (tagManagementState.successMessage != null)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.green,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(FluentIcons.check_mark, size: 16, color: Colors.white),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        tagManagementState.successMessage!,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(FluentIcons.clear, size: 16, color: Colors.white),
-                      onPressed: () => ref.read(tagManagementProvider.notifier).clearMessages(),
-                    ),
-                  ],
+                margin: const EdgeInsets.only(bottom: DesignTokens.space4),
+                child: DesignSystemComponents.statusBadge(
+                  text: tagManagementState.successMessage!,
+                  type: SemanticColorType.success,
+                  icon: FluentIcons.check_mark,
                 ),
               ),
 
-            Row(
+            LayoutSystem.inlineFormFields(
               children: [
-                // Search bar
-                Expanded(
-                  flex: 2,
-                  child: TextBox(
-                    controller: _searchController,
-                    placeholder: 'Search clients...',
-                    prefix: const Icon(FluentIcons.search),
-                    onChanged: (value) {
-                      setState(() {
-                        _searchTerm = value;
-                      });
-                    },
-                  ),
+                DesignSystemComponents.textInput(
+                  controller: _searchController,
+                  label: 'Search Clients',
+                  placeholder: 'Search by name, email, or company...',
+                  prefixIcon: FluentIcons.search,
+                  onChanged: (value) {
+                    setState(() {
+                      _searchTerm = value;
+                    });
+                  },
                 ),
-                const SizedBox(width: 16),
-                
-                // Tag filter
-                Expanded(
-                  flex: 3,
-                  child: tagsAsync.when(
-                    data: (tags) => _buildTagFilter(tags),
-                    loading: () => const ProgressRing(),
-                    error: (error, stack) => Text('Error: $error'),
+                tagsAsync.when(
+                  data: (tags) => _buildTagFilter(tags),
+                  loading: () => DesignSystemComponents.loadingIndicator(
+                    message: 'Loading tags...',
+                    size: 24,
+                  ),
+                  error: (error, stack) => DesignSystemComponents.statusBadge(
+                    text: 'Error loading tags',
+                    type: SemanticColorType.error,
                   ),
                 ),
               ],
             ),
 
-            const SizedBox(height: 16),
+            LayoutSystem.verticalSpace(DesignTokens.space4),
 
-            // Selected clients info
             if (tagManagementState.selectedClients.isNotEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: FluentTheme.of(context).accentColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: FluentTheme.of(context).accentColor.withValues(alpha: 0.3),
-                  ),
-                ),
+              DesignSystemComponents.standardCard(
                 child: Row(
                   children: [
-                    Icon(
-                      FluentIcons.people,
-                      size: 16,
-                      color: FluentTheme.of(context).accentColor,
+                    DesignSystemComponents.statusDot(
+                      type: SemanticColorType.info,
+                      size: 12,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${tagManagementState.selectedClients.length} clients selected',
-                      style: TextStyle(
-                        color: FluentTheme.of(context).accentColor,
-                        fontWeight: FontWeight.w600,
+                    LayoutSystem.horizontalSpace(DesignTokens.space2),
+                    Expanded(
+                      child: Text(
+                        '${tagManagementState.selectedClients.length} clients selected',
+                        style: DesignTextStyles.body.copyWith(
+                          fontWeight: DesignTokens.fontWeightSemiBold,
+                        ),
                       ),
                     ),
-                    const Spacer(),
-                    Button(
-                      child: const Text('Clear Selection'),
+                    DesignSystemComponents.secondaryButton(
+                      text: 'Clear Selection',
                       onPressed: () => ref.read(tagManagementProvider.notifier).clearSelectedClients(),
                     ),
                   ],
                 ),
               ),
 
-            const SizedBox(height: 16),
+            LayoutSystem.verticalSpace(DesignTokens.space4),
 
-            // Client list with tags
-            Expanded(
-              child: Row(
-                children: [
-                  // Main client list
-                  Expanded(
-                    flex: 3,
-                    child: clientsAsync.when(
-                      data: (clients) {
-                        final filteredClients = _searchTerm.isEmpty
-                            ? clients
-                            : clients.where((client) =>
-                                client.fullName.toLowerCase().contains(_searchTerm.toLowerCase()) ||
-                                (client.email?.toLowerCase().contains(_searchTerm.toLowerCase()) ?? false) ||
-                                (client.company?.toLowerCase().contains(_searchTerm.toLowerCase()) ?? false)
-                              ).toList();
+            Flexible(
+              fit: FlexFit.loose,
+              child: LayoutSystem.threeColumnLayout(
+                leftFlex: 2,
+                centerFlex: 3,
+                rightFlex: 2,
+                left: _buildTagSidebar(tagsAsync, tagUsageStatsAsync),
+                center: _buildClientList(clientsAsync, tagManagementState),
+                right: _buildTagStatistics(tagsAsync, tagUsageStatsAsync),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-                        if (filteredClients.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildTagSidebar(AsyncValue<List<TagModel>> tagsAsync, AsyncValue<Map<int, int>> tagUsageStatsAsync) {
+    return LayoutSystem.sectionContainer(
+      title: 'Available Tags',
+      subtitle: 'Select tags to filter clients',
+      action: DesignSystemComponents.secondaryButton(
+        text: 'Manage',
+        icon: FluentIcons.settings,
+        onPressed: () => _showTagDialog(),
+      ),
+      child: SizedBox(
+        height: 400,
+        child: tagsAsync.when(
+          data: (tags) => tagUsageStatsAsync.when(
+            data: (stats) => _buildTagList(tags, stats),
+            loading: () => _buildTagList(tags, {}),
+            error: (error, stack) => _buildTagList(tags, {}),
+          ),
+          loading: () => DesignSystemComponents.loadingIndicator(
+            message: 'Loading tags...',
+          ),
+          error: (error, stack) => DesignSystemComponents.emptyState(
+            title: 'Error Loading Tags',
+            message: 'Failed to load tags: $error',
+            icon: FluentIcons.error,
+            actionText: 'Retry',
+            onAction: () => _refreshAllData(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClientList(AsyncValue<List<ClientWithTags>> clientsAsync, TagManagementState tagManagementState) {
+    return LayoutSystem.sectionContainer(
+      title: 'Clients',
+      subtitle: 'Manage client tags and assignments',
+      child: clientsAsync.when(
+        data: (clients) {
+          final filteredClients = _searchTerm.isEmpty
+              ? clients
+              : clients.where((client) =>
+                  client.fullName.toLowerCase().contains(_searchTerm.toLowerCase()) ||
+                  (client.email?.toLowerCase().contains(_searchTerm.toLowerCase()) ?? false) ||
+                  (client.company?.toLowerCase().contains(_searchTerm.toLowerCase()) ?? false)
+                ).toList();
+
+          if (filteredClients.isEmpty) {
+            return DesignSystemComponents.emptyState(
+              title: 'No Clients Found',
+              message: _searchTerm.isEmpty && _selectedTagFilter.isEmpty
+                  ? 'No clients found. Add some clients to get started.'
+                  : 'No clients found matching your criteria.',
+              icon: FluentIcons.people,
+              actionText: _searchTerm.isNotEmpty || _selectedTagFilter.isNotEmpty ? 'Clear Filters' : null,
+              onAction: _searchTerm.isNotEmpty || _selectedTagFilter.isNotEmpty ? () {
+                setState(() {
+                  _searchTerm = '';
+                  _searchController.clear();
+                  _selectedTagFilter.clear();
+                });
+                Future.microtask(() {
+                  ref.invalidate(allClientsWithTagsProvider);
+                });
+              } : null,
+            );
+          }
+
+          return SizedBox(
+            height: 500,
+            child: ListView.builder(
+              key: ValueKey('clients_${filteredClients.length}_${_selectedTagFilter.join(",")}_${DateTime.now().millisecondsSinceEpoch ~/ 1000}'),
+              itemCount: filteredClients.length,
+              itemBuilder: (context, index) {
+                final client = filteredClients[index];
+                final isSelected = tagManagementState.selectedClients.contains(client.id);
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: DesignTokens.space2),
+                  child: DesignSystemComponents.standardCard(
+                    isSelected: isSelected,
+                    onTap: () => ref.read(tagManagementProvider.notifier).selectClient(client.id),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Checkbox(
+                              checked: isSelected,
+                              onChanged: (checked) {
+                                ref.read(tagManagementProvider.notifier).selectClient(client.id);
+                              },
+                            ),
+                            LayoutSystem.horizontalSpace(DesignTokens.space2),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    client.fullName,
+                                    style: DesignTextStyles.body.copyWith(
+                                      fontWeight: DesignTokens.fontWeightSemiBold,
+                                    ),
+                                  ),
+                                  if (client.email != null) ...[
+                                    LayoutSystem.verticalSpace(DesignTokens.space1),
+                                    Text(
+                                      client.email!,
+                                      style: DesignTextStyles.caption,
+                                    ),
+                                  ],
+                                  if (client.company != null) ...[
+                                    LayoutSystem.verticalSpace(DesignTokens.space1),
+                                    Text(
+                                      client.company!,
+                                      style: DesignTextStyles.caption,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(FluentIcons.people, size: 48),
-                                const SizedBox(height: 16),
-                                Text(
-                                  _searchTerm.isEmpty && _selectedTagFilter.isEmpty
-                                      ? 'No clients found. Add some clients to get started.'
-                                      : 'No clients found matching your criteria.',
-                                  style: FluentTheme.of(context).typography.body,
+                                DesignSystemComponents.secondaryButton(
+                                  text: 'Tags',
+                                  icon: FluentIcons.tag,
+                                  onPressed: () => _showClientTagDialog(client.id, client.fullName),
                                 ),
-                                if (_searchTerm.isNotEmpty || _selectedTagFilter.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Button(
-                                    child: const Text('Clear Filters'),
-                                    onPressed: () {
-                                      setState(() {
-                                        _searchTerm = '';
-                                        _searchController.clear();
-                                        _selectedTagFilter.clear();
-                                      });
-                                      Future.microtask(() {
-                                        ref.invalidate(allClientsWithTagsProvider);
-                                      });
-                                    },
+                                LayoutSystem.horizontalSpace(DesignTokens.space1),
+                                DesignSystemComponents.secondaryButton(
+                                  text: 'Edit',
+                                  icon: FluentIcons.edit,
+                                  onPressed: () => context.go('/clients/edit/${client.id}'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        if (client.tags.isNotEmpty) ...[
+                          LayoutSystem.verticalSpace(DesignTokens.space3),
+                          Wrap(
+                            spacing: DesignTokens.space1,
+                            runSpacing: DesignTokens.space1,
+                            children: client.tags.map((tag) => TagChip(
+                              key: ValueKey('tag_${tag.id}_${tag.name}_${tag.color}'),
+                              tag: tag,
+                              size: TagChipSize.small,
+                              onRemove: () => _removeTagFromClient(client.id, tag.id),
+                            )).toList(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+        loading: () => DesignSystemComponents.loadingIndicator(
+          message: 'Loading clients...',
+        ),
+        error: (error, stack) => DesignSystemComponents.emptyState(
+          title: 'Error Loading Clients',
+          message: 'Failed to load clients: $error',
+          icon: FluentIcons.error,
+          actionText: 'Retry',
+          onAction: () => _refreshAllData(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTagStatistics(AsyncValue<List<TagModel>> tagsAsync, AsyncValue<Map<int, int>> tagUsageStatsAsync) {
+    return LayoutSystem.sectionContainer(
+      title: 'Tag Statistics',
+      subtitle: 'Overview of tag usage',
+      child: SizedBox(
+        height: 400,
+        child: tagsAsync.when(
+          data: (tags) => tagUsageStatsAsync.when(
+            data: (stats) {
+              if (tags.isEmpty) {
+                return DesignSystemComponents.emptyState(
+                  title: 'No Tags',
+                  message: 'Create your first tag to get started!',
+                  icon: FluentIcons.tag,
+                  actionText: 'Create Tag',
+                  onAction: () => _showTagDialog(),
+                );
+              }
+
+              return ListView.builder(
+                itemCount: tags.length,
+                itemBuilder: (context, index) {
+                  final tag = tags[index];
+                  final usageCount = stats[tag.id] ?? 0;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: DesignTokens.space2),
+                    child: DesignSystemComponents.standardCard(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: Color(int.parse('0xFF${tag.color.substring(1)}')),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          LayoutSystem.horizontalSpace(DesignTokens.space2),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  tag.name,
+                                  style: DesignTextStyles.body.copyWith(
+                                    fontWeight: DesignTokens.fontWeightMedium,
+                                  ),
+                                ),
+                                if (tag.description != null) ...[
+                                  LayoutSystem.verticalSpace(DesignTokens.space1),
+                                  Text(
+                                    tag.description!,
+                                    style: DesignTextStyles.caption,
                                   ),
                                 ],
                               ],
                             ),
-                          );
-                        }
-
-                        return ListView.builder(
-                          key: ValueKey('clients_${filteredClients.length}_${_selectedTagFilter.join(",")}_${DateTime.now().millisecondsSinceEpoch ~/ 1000}'), // Force rebuild
-                          itemCount: filteredClients.length,
-                          itemBuilder: (context, index) {
-                            final client = filteredClients[index];
-                            final isSelected = tagManagementState.selectedClients.contains(client.id);
-
-                            return Card(
-                              key: ValueKey('client_${client.id}_${client.tags.length}'), // Include tag count in key
-                              backgroundColor: isSelected
-                                  ? FluentTheme.of(context).accentColor.withValues(alpha: 0.1)
-                                  : null,
-                              child: ListTile(
-                                leading: Checkbox(
-                                  checked: isSelected,
-                                  onChanged: (checked) {
-                                    ref.read(tagManagementProvider.notifier).selectClient(client.id);
-                                  },
-                                ),
-                                title: Text(client.fullName),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (client.email != null) Text(client.email!),
-                                    if (client.company != null) Text(client.company!),
-                                    if (client.tags.isNotEmpty) ...[
-                                      const SizedBox(height: 4),
-                                      Wrap(
-                                        spacing: 4,
-                                        runSpacing: 4,
-                                        children: client.tags.map((tag) => TagChip(
-                                          key: ValueKey('tag_${tag.id}_${tag.name}_${tag.color}'), // Force rebuild on tag changes
-                                          tag: tag,
-                                          size: TagChipSize.small,
-                                          onRemove: () => _removeTagFromClient(client.id, tag.id),
-                                        )).toList(),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(FluentIcons.tag),
-                                      onPressed: () => _showClientTagDialog(client.id, client.fullName),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(FluentIcons.edit),
-                                      onPressed: () => context.go('/clients/edit/${client.id}'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                      loading: () => const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ProgressRing(),
-                            SizedBox(height: 16),
-                            Text('Loading clients...'),
-                          ],
-                        ),
-                      ),
-                      error: (error, stack) => Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(FluentIcons.error, size: 48, color: Colors.red),
-                            const SizedBox(height: 16),
-                            Text('Error loading clients: $error'),
-                            const SizedBox(height: 8),
-                            Button(
-                              child: const Text('Retry'),
-                              onPressed: () => _refreshAllData(),
-                            ),
-                          ],
-                        ),
+                          ),
+                          DesignSystemComponents.statusBadge(
+                            text: '$usageCount',
+                            type: SemanticColorType.info,
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-
-                  const SizedBox(width: 16),
-
-                  // Tag management sidebar
-                  Expanded(
-                    flex: 1,
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Available Tags',
-                              style: FluentTheme.of(context).typography.subtitle,
-                            ),
-                            const SizedBox(height: 12),
-                            
-                            Expanded(
-                              child: tagsAsync.when(
-                                data: (tags) => tagUsageStatsAsync.when(
-                                  data: (stats) => _buildTagList(tags, stats),
-                                  loading: () => _buildTagList(tags, {}),
-                                  error: (error, stack) => _buildTagList(tags, {}),
-                                ),
-                                loading: () => const Center(child: ProgressRing()),
-                                error: (error, stack) => Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text('Error: $error'),
-                                      const SizedBox(height: 8),
-                                      Button(
-                                        child: const Text('Retry'),
-                                        onPressed: () => _refreshAllData(),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                  );
+                },
+              );
+            },
+            loading: () => DesignSystemComponents.loadingIndicator(
+              message: 'Loading statistics...',
             ),
-          ],
+            error: (error, stack) => Text('Error: $error'),
+          ),
+          loading: () => DesignSystemComponents.loadingIndicator(
+            message: 'Loading tags...',
+          ),
+          error: (error, stack) => Text('Error: $error'),
         ),
       ),
     );
@@ -444,16 +485,21 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Filter by tags:'),
-        const SizedBox(height: 4),
+        Text(
+          'Filter by tags:',
+          style: DesignTextStyles.body.copyWith(
+            fontWeight: DesignTokens.fontWeightMedium,
+          ),
+        ),
+        LayoutSystem.verticalSpace(DesignTokens.space1),
         Wrap(
-          spacing: 4,
-          runSpacing: 4,
+          spacing: DesignTokens.space1,
+          runSpacing: DesignTokens.space1,
           children: [
             ...tags.map((tag) {
               final isSelected = _selectedTagFilter.contains(tag.id);
               return TagChip(
-                key: ValueKey('filter_tag_${tag.id}_${tag.name}_${tag.color}'), // Force rebuild on tag changes
+                key: ValueKey('filter_tag_${tag.id}_${tag.name}_${tag.color}'),
                 tag: tag,
                 isSelected: isSelected,
                 onTap: () {
@@ -467,21 +513,19 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                   Future.microtask(() {
                     logger.i('Invalidating providers for tag selection: $_selectedTagFilter');
                     
-                    // Invalidate the specific provider with current tag selection
                     if (_selectedTagFilter.isNotEmpty) {
                       ref.invalidate(clientsWithTagsProvider(_selectedTagFilter));
                     }
                     
-                    // Also invalidate the all clients provider to ensure consistency
                     ref.invalidate(allClientsWithTagsProvider);
                   });
                 },
               );
             }),
             if (_selectedTagFilter.isNotEmpty)
-              ActionChip(
-                avatar: const Icon(FluentIcons.clear, size: 12),
-                label: const Text('Clear'),
+              DesignSystemComponents.secondaryButton(
+                text: 'Clear',
+                icon: FluentIcons.clear,
                 onPressed: () {
                   setState(() {
                     _selectedTagFilter.clear();
@@ -499,33 +543,37 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
 
   Widget _buildTagList(List<TagModel> tags, Map<int, int> usageStats) {
     if (tags.isEmpty) {
-      return const Center(
-        child: Text('No tags available. Create your first tag!'),
+      return DesignSystemComponents.emptyState(
+        title: 'No Tags Available',
+        message: 'Create your first tag!',
+        icon: FluentIcons.tag,
+        actionText: 'Create Tag',
+        onAction: () => _showTagDialog(),
       );
     }
 
     return ListView.builder(
-      key: ValueKey('tags_${tags.length}_${DateTime.now().millisecondsSinceEpoch ~/ 1000}'), // Force rebuild
+      key: ValueKey('tags_${tags.length}_${DateTime.now().millisecondsSinceEpoch ~/ 1000}'),
       itemCount: tags.length,
       itemBuilder: (context, index) {
         final tag = tags[index];
         final usageCount = usageStats[tag.id] ?? 0;
         final isSelected = ref.watch(tagManagementProvider).selectedTags.contains(tag.id);
 
-        return Card(
-          key: ValueKey('tag_card_${tag.id}_${tag.name}_${tag.color}_${tag.updatedAt}'), // Include updated timestamp
-          backgroundColor: isSelected
-              ? FluentTheme.of(context).accentColor.withValues(alpha: 0.1)
-              : null,
-          child: ListTile(
-            leading: Checkbox(
-              checked: isSelected,
-              onChanged: (checked) {
-                ref.read(tagManagementProvider.notifier).selectTag(tag.id);
-              },
-            ),
-            title: Row(
+        return Padding(
+          padding: const EdgeInsets.only(bottom: DesignTokens.space2),
+          child: DesignSystemComponents.standardCard(
+            isSelected: isSelected,
+            onTap: () => ref.read(tagManagementProvider.notifier).selectTag(tag.id),
+            child: Row(
               children: [
+                Checkbox(
+                  checked: isSelected,
+                  onChanged: (checked) {
+                    ref.read(tagManagementProvider.notifier).selectTag(tag.id);
+                  },
+                ),
+                LayoutSystem.horizontalSpace(DesignTokens.space2),
                 Container(
                   width: 12,
                   height: 12,
@@ -534,27 +582,52 @@ class _TagManagementScreenState extends ConsumerState<TagManagementScreen> {
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(child: Text(tag.name)),
-              ],
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (tag.description != null) Text(tag.description!),
-                Text('Used by $usageCount clients'),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(FluentIcons.edit),
-                  onPressed: () => _showTagDialog(tag),
+                LayoutSystem.horizontalSpace(DesignTokens.space2),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tag.name,
+                        style: DesignTextStyles.body.copyWith(
+                          fontWeight: DesignTokens.fontWeightMedium,
+                        ),
+                      ),
+                      if (tag.description != null) ...[
+                        LayoutSystem.verticalSpace(DesignTokens.space1),
+                        Text(
+                          tag.description!,
+                          style: DesignTextStyles.caption,
+                        ),
+                      ],
+                      LayoutSystem.verticalSpace(DesignTokens.space1),
+                      Text(
+                        'Used by $usageCount clients',
+                        style: DesignTextStyles.caption.copyWith(
+                          color: DesignTokens.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                IconButton(
-                  icon: const Icon(FluentIcons.delete),
-                  onPressed: () => _showDeleteTagDialog(tag),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DesignSystemComponents.secondaryButton(
+                      text: 'Edit',
+                      icon: FluentIcons.edit,
+                      onPressed: () => _showTagDialog(tag),
+                    ),
+                    LayoutSystem.horizontalSpace(DesignTokens.space1),
+                    DesignSystemComponents.dangerButton(
+                      text: 'Delete',
+                      icon: FluentIcons.delete,
+                      onPressed: () => _showDeleteTagDialog(tag),
+                      requireConfirmation: true,
+                      confirmationTitle: 'Delete Tag',
+                      confirmationMessage: 'Are you sure you want to delete the tag "${tag.name}"? This will remove it from all clients.',
+                    ),
+                  ],
                 ),
               ],
             ),

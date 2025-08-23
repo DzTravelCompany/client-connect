@@ -155,10 +155,6 @@ class AdaptiveToolbar extends ConsumerWidget {
             onTap: () => ref.read(commandPaletteProvider.notifier).show(),
           ),
         ),
-        SizedBox(width: DesignTokens.space4),
-        
-        // Context-specific actions
-        ..._buildContextActions(context, ref, navigationState.currentContext),
       ],
     );
   }
