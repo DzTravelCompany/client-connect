@@ -361,115 +361,120 @@ class EditorCanvas extends ConsumerWidget {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isHovering
-                          ? [
-                              theme.accentColor.withValues(alpha: 0.15),
-                              theme.accentColor.withValues(alpha: 0.08),
-                            ]
-                          : [
-                              theme.accentColor.withValues(alpha: 0.08),
-                              theme.accentColor.withValues(alpha: 0.05),
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isHovering
+                              ? [
+                                  theme.accentColor.withValues(alpha: 0.15),
+                                  theme.accentColor.withValues(alpha: 0.08),
+                                ]
+                              : [
+                                  theme.accentColor.withValues(alpha: 0.08),
+                                  theme.accentColor.withValues(alpha: 0.05),
+                                ],
+                        ),
+                        borderRadius: BorderRadius.circular(50),
+                        border: Border.all(
+                          color: isHovering
+                              ? theme.accentColor.withValues(alpha: 0.3)
+                              : theme.accentColor.withValues(alpha: 0.15),
+                        ),
+                      ),
+                      child: Icon(
+                        isHovering 
+                            ? FluentIcons.add 
+                            : _getTemplateTypeIcon(templateType ?? TemplateType.email),
+                        size: 56,
+                        color: isHovering
+                            ? theme.accentColor
+                            : theme.accentColor.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 300),
+                      style: theme.typography.subtitle?.copyWith(
+                        color: isHovering
+                            ? theme.accentColor
+                            : theme.accentColor.withValues(alpha: 0.8),
+                        fontWeight: FontWeight.w600,
+                      ) ?? const TextStyle(),
+                      child: Text(
+                        isHovering
+                            ? 'Drop block here to get started'
+                            : 'Start building your ${templateType?.name ?? 'template'}',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (!isHovering) ...[
+                      Text(
+                        _getEmptyStateMessage(templateType),
+                        style: theme.typography.body?.copyWith(
+                          color: theme.inactiveColor,
+                          fontSize: 13,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 32),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              theme.cardColor.withValues(alpha: 0.8),
+                              theme.cardColor.withValues(alpha: 0.6),
                             ],
-                    ),
-                    borderRadius: BorderRadius.circular(50),
-                    border: Border.all(
-                      color: isHovering
-                          ? theme.accentColor.withValues(alpha: 0.3)
-                          : theme.accentColor.withValues(alpha: 0.15),
-                    ),
-                  ),
-                  child: Icon(
-                    isHovering 
-                        ? FluentIcons.add 
-                        : _getTemplateTypeIcon(templateType ?? TemplateType.email),
-                    size: 56,
-                    color: isHovering
-                        ? theme.accentColor
-                        : theme.accentColor.withValues(alpha: 0.6),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 300),
-                  style: theme.typography.subtitle?.copyWith(
-                    color: isHovering
-                        ? theme.accentColor
-                        : theme.accentColor.withValues(alpha: 0.8),
-                    fontWeight: FontWeight.w600,
-                  ) ?? const TextStyle(),
-                  child: Text(
-                    isHovering
-                        ? 'Drop block here to get started'
-                        : 'Start building your ${templateType?.name ?? 'template'}',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (!isHovering) ...[
-                  Text(
-                    _getEmptyStateMessage(templateType),
-                    style: theme.typography.body?.copyWith(
-                      color: theme.inactiveColor,
-                      fontSize: 13,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          theme.cardColor.withValues(alpha: 0.8),
-                          theme.cardColor.withValues(alpha: 0.6),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: theme.accentColor.withValues(alpha: 0.15),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: theme.accentColor.withValues(alpha: 0.15),
+                          ),
+                        ),
+                        child: Column(
                           children: [
-                            Icon(
-                              FluentIcons.lightbulb,
-                              size: 20,
-                              color: theme.accentColor,
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  FluentIcons.lightbulb,
+                                  size: 20,
+                                  color: theme.accentColor,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Quick Tips',
+                                  style: theme.typography.bodyStrong?.copyWith(
+                                    color: theme.accentColor,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(height: 12),
                             Text(
-                              'Quick Tips',
-                              style: theme.typography.bodyStrong?.copyWith(
-                                color: theme.accentColor,
+                              '• Drag blocks from the left panel\n• Use placeholders like {{name}} for dynamic content\n• Preview your template anytime',
+                              style: theme.typography.caption?.copyWith(
+                                color: theme.inactiveColor,
+                                fontSize: 12,
+                                height: 1.4,
                               ),
+                              textAlign: TextAlign.left,
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          '• Drag blocks from the left panel\n• Use placeholders like {{name}} for dynamic content\n• Preview your template anytime',
-                          style: theme.typography.caption?.copyWith(
-                            color: theme.inactiveColor,
-                            fontSize: 12,
-                            height: 1.4,
-                          ),
-                          textAlign: TextAlign.left,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         );
